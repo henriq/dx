@@ -1,0 +1,115 @@
+package handler
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"regexp"
+	"strings"
+
+	"dx/internal/core"
+	"dx/internal/core/domain"
+	"dx/internal/ports"
+)
+
+type RunCommandHandler struct {
+	configRepository  core.ConfigRepository
+	secretsRepository core.SecretsRepository
+	templater         ports.Templater
+	scm               ports.Scm
+}
+
+func ProvideRunCommandHandler(
+	configRepository core.ConfigRepository,
+	secretsRepository core.SecretsRepository,
+	templater ports.Templater,
+	scm ports.Scm,
+) RunCommandHandler {
+	return RunCommandHandler{
+		configRepository:  configRepository,
+		secretsRepository: secretsRepository,
+		templater:         templater,
+		scm:               scm,
+	}
+}
+
+func (h *RunCommandHandler) Handle(scripts map[string]string, executionPlan []string) error {
+	renderValues, err := core.CreateTemplatingValues(h.configRepository, h.secretsRepository)
+	if err != nil {
+		return err
+	}
+
+	configContext, err := h.configRepository.LoadCurrentConfigurationContext()
+	if err != nil {
+		return err
+	}
+
+	for _, scriptName := range executionPlan {
+		script := scripts[scriptName]
+
+		dependentServices, err := findServiceDependencies(script, configContext.Services)
+		if err != nil {
+			return err
+		}
+
+		if len(dependentServices) > 0 {
+			var dependentServiceNames []string
+			for _, service := range dependentServices {
+				dependentServiceNames = append(dependentServiceNames, service.Name)
+			}
+			fmt.Printf("Updating repositories for dependencies: %s\n", strings.Join(dependentServiceNames, ", "))
+		}
+
+		for _, dependentService := range dependentServices {
+			if dependentService.GitRepoPath == "" || dependentService.GitRef == "" {
+				return fmt.Errorf("git repository path or ref is empty for service '%s'", dependentService.Name)
+			}
+			err = h.scm.Download(dependentService.GitRepoPath, dependentService.GitRef, dependentService.Path)
+			if err != nil {
+				return err
+			}
+		}
+
+		renderedScript, err := h.templater.Render(script, scriptName, renderValues)
+		if err != nil {
+			return err
+		}
+		cmd := exec.Command("bash", "-c", renderedScript)
+
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Stdin = os.Stdin
+
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("error running script %s: %v", scriptName, err)
+		}
+	}
+	return nil
+}
+
+func findServiceDependencies(script string, existingServices []domain.Service) ([]domain.Service, error) {
+	serviceRegex := regexp.MustCompile(`{{[^}]*\.Services\s*\.*"*([\w\-_]+)[^}]*path`)
+	matches := serviceRegex.FindAllStringSubmatch(script, -1)
+
+	services := make([]domain.Service, 0)
+	for _, match := range matches {
+		if len(match) > 1 {
+			service, err := findService(match[1], existingServices)
+			if err != nil {
+				return nil, err
+			}
+			services = append(services, service)
+		}
+	}
+
+	return services, nil
+}
+
+func findService(serviceName string, existingServices []domain.Service) (domain.Service, error) {
+	for _, service := range existingServices {
+		if service.Name == serviceName {
+			return service, nil
+		}
+	}
+	return domain.Service{}, fmt.Errorf("service '%s' not found", serviceName)
+}

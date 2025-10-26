@@ -1,0 +1,10 @@
+target/*
+.env-key
+config.json
+*.iml
+.idea
+.vscode
+.DS_Store
+build-and-sign-release.sh
+# Added by goreleaser init:
+dist/

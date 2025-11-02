@@ -87,7 +87,7 @@ dx completion powershell | Out-String | Invoke-Expression
 dx initialize
 
 # Switch between contexts
-dx context [context-name]
+dx context set [context-name]
 
 # Build Docker images
 dx build [service-name]

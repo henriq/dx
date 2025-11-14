@@ -7,7 +7,6 @@
 package app
 
 import (
-	"github.com/google/wire"
 	"dx/internal/adapters/container_image_repository"
 	"dx/internal/adapters/container_orchestrator"
 	"dx/internal/adapters/filesystem"
@@ -18,6 +17,7 @@ import (
 	"dx/internal/core"
 	"dx/internal/core/handler"
 	"dx/internal/ports"
+	"github.com/google/wire"
 )
 
 // Injectors from wire.go:
@@ -165,6 +165,17 @@ func InjectShowVarsCommandHandler() (handler.ShowVarsCommandHandler, error) {
 	fileSystemConfigRepository := core.ProvideFileSystemConfigRepository(osFileSystem, secretsRepository, portsTemplater)
 	showVarsCommandHandler := handler.ProvideShowVarsCommandHandler(secretsRepository, fileSystemConfigRepository)
 	return showVarsCommandHandler, nil
+}
+
+func InjectGenerateCommandHandler() (handler.GenerateCommandHandler, error) {
+	osFileSystem := filesystem.ProvideOsFileSystem()
+	portsKeyring := keyring.ProvideZalandoKeyring()
+	aesGcmEncryptor := symmetric_encryptor.ProvideAesGcmEncryptor()
+	secretsRepository := core.ProvideEncryptedFileSecretRepository(osFileSystem, portsKeyring, aesGcmEncryptor)
+	portsTemplater := templater.ProvideTextTemplater()
+	fileSystemConfigRepository := core.ProvideFileSystemConfigRepository(osFileSystem, secretsRepository, portsTemplater)
+	generateCommandHandler := handler.ProvideGenerateCommandHandler(fileSystemConfigRepository)
+	return generateCommandHandler, nil
 }
 
 // wire.go:

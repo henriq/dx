@@ -14,6 +14,7 @@ import (
 	"dx/internal/core"
 	"dx/internal/core/handler"
 	"dx/internal/ports"
+
 	"github.com/google/wire"
 )
 
@@ -136,4 +137,12 @@ func InjectShowVarsCommandHandler() (handler.ShowVarsCommandHandler, error) {
 		handler.ProvideShowVarsCommandHandler,
 	)
 	return handler.ShowVarsCommandHandler{}, nil
+}
+
+func InjectGenerateCommandHandler() (handler.GenerateCommandHandler, error) {
+	wire.Build(
+		CommandHandlerSet,
+		handler.ProvideGenerateCommandHandler,
+	)
+	return handler.GenerateCommandHandler{}, nil
 }

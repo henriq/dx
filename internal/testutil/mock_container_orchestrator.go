@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"dx/internal/core/domain"
+
 	"github.com/stretchr/testify/mock"
 )
 

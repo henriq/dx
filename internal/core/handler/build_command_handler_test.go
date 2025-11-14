@@ -5,6 +5,7 @@ import (
 
 	"dx/internal/core/domain"
 	"dx/internal/testutil"
+
 	"github.com/stretchr/testify/assert"
 )
 

@@ -6,6 +6,7 @@ import (
 	"dx/internal/core"
 	"dx/internal/core/domain"
 	"dx/internal/testutil"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

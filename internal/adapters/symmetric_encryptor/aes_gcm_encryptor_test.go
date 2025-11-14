@@ -1,9 +1,10 @@
 package symmetric_encryptor
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/util/uuid"
-	"testing"
 )
 
 func TestAesGcmEncryptor_EncryptReturnsCipherText(t *testing.T) {

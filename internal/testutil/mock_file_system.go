@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"dx/internal/ports"
+
 	"github.com/stretchr/testify/mock"
 )
 

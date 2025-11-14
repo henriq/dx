@@ -3,6 +3,7 @@ package keyring
 import (
 	"dx/internal/ports"
 	"errors"
+
 	"github.com/zalando/go-keyring"
 )
 

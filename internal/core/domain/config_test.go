@@ -1,9 +1,10 @@
 package domain
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/util/uuid"
-	"testing"
 )
 
 func TestConfig_ContextExists(t *testing.T) {

@@ -2,9 +2,10 @@ package handler
 
 import (
 	"dx/internal/testutil"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"testing"
 )
 
 func TestInitializeCommandHandler_HandleReturnsErrorIfConfigExists(t *testing.T) {

@@ -48,7 +48,7 @@ frontend {{ .Name }}
 backend be-{{ .Name }}
     {{- if .HealthCheckPath }}
     option httpchk
-    http-check send meth GET uri {{ .HealthCheckPath }} ver HTTP/1.1 hdr Host host.docker.internal
+    http-check send meth GET uri {{ .HealthCheckPath }} ver HTTP/1.1
     {{- else }}
     option tcp-check
     {{- end }}
@@ -56,6 +56,4 @@ backend be-{{ .Name }}
     server local host.docker.internal:{{ .LocalPort }} check
     {{- end }}
     server k8s {{ .Name }}-srv:{{ .KubernetesPort }} check backup
-
-    http-request set-header Host host.docker.internal if { srv_id 1 }
 {{ end }}

@@ -36,6 +36,10 @@ The following command-line tools must be installed and available in your PATH:
 
 ## Installation
 
+### Homebrew
+
+Install DX with Homebrew by tapping the homebrew cask with `brew tap henriq/dx`. Then install DX with `brew install dx`.
+
 ### Manual Installation
 
 Download the latest release from the [releases page](https://github.com/henriq/dx/releases) and extract it to a directory in your PATH.

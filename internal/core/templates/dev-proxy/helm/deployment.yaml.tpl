@@ -16,6 +16,9 @@ spec:
       annotations:
         checksum: {{ .Checksum }}
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: haproxy
         image: henriq/haproxy-{{ .Name }}
@@ -23,11 +26,35 @@ spec:
         ports:
         - containerPort: 8080
         - containerPort: 8888
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: haproxy-data
+          mountPath: /var/lib/haproxy
       - name: mitmproxy
         image: henriq/mitmproxy-{{ .Name }}
         imagePullPolicy: Never
         tty: true
         stdin: true
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: mitmproxy-cache
+          mountPath: /home/nonroot/.cache
+        - name: mitmproxy-data
+          mountPath: /data
+        - name: mitmproxy-home
+          mountPath: /home/nonroot/.mitmproxy
         command: ["mitmweb"]
         args:
           - --set
@@ -45,6 +72,19 @@ spec:
 {{- range $key, $value := .Services }}
           - --mode=reverse:http://localhost:{{.FrontendPort}}@{{ .ProxyPort }}
 {{- end }}
+      volumes:
+      - name: tmp
+        emptyDir:
+          medium: Memory
+      - name: haproxy-data
+        emptyDir: {}
+      - name: mitmproxy-cache
+        emptyDir:
+          medium: Memory
+      - name: mitmproxy-data
+        emptyDir: {}
+      - name: mitmproxy-home
+        emptyDir: {}
 
 ---
 

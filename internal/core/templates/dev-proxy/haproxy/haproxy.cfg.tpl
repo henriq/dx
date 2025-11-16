@@ -48,7 +48,7 @@ frontend {{ .Name }}
 backend be-{{ .Name }}
     {{- if .HealthCheckPath }}
     option httpchk
-    http-check send meth GET uri {{ .HealthCheckPath }} ver HTTP/1.1
+    http-check send meth GET uri {{ .HealthCheckPath }} ver HTTP/1.1 hdr Host host.docker.internal
     {{- else }}
     option tcp-check
     {{- end }}

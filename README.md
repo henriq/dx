@@ -9,7 +9,7 @@ DX has the following goals:
 * It should be easy to update services
 * It should be possible to run services in an IDE fully integrated with the local environment
 * It should provide a secure secrets management to keep secrets out of text files
-* It should provide a way to introspect HTTP traffic between services
+* It should provide a way to inspect HTTP traffic between services
 * It should be easy to share configurations between teams
 
 DX solves these goals by providing a standardized way of defining how applications are built and deployed. It uses

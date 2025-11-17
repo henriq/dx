@@ -1,10 +1,31 @@
-target/*
-.env-key
-config.json
-*.iml
-.idea
-.vscode
-.DS_Store
-build-and-sign-release.sh
-# Added by goreleaser init:
+# Go build artifacts
+bin/
 dist/
+target/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test binaries & outputs
+*.test
+*.out
+
+# Go coverage & profiling data
+coverage.*
+coverage/
+*.cover
+*.coverprofile
+*.cov
+*.pprof
+*.prof
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor configuration
+.idea/
+.vscode/
+*.iml

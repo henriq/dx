@@ -46,7 +46,7 @@ Download the latest release from the [releases page](https://github.com/henriq/d
 
 ### Windows Considerations
 
-* **Line Ending Management** - Prevent git line-ending conversion issues with:
+* **Line Ending Management** - When running on Windows, DX will have issues if it's line endings are converted to clrf. Line ending conversion can be disabled by running:
 
 ```bash
 git config --global core.autocrlf false

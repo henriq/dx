@@ -1,4 +1,6 @@
 name: Test
+permissions:
+  contents: read
 
 on:
   push:
@@ -7,7 +9,6 @@ on:
     branches: [ "main" ]
 
 jobs:
-
   build:
     runs-on: ubuntu-latest
     steps:

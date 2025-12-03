@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"strings"
 )
 
 type ConfigurationContext struct {
@@ -31,7 +32,8 @@ type Service struct {
 
 type DockerImage struct {
 	Name                     string   `yaml:"name"`
-	DockerfilePath           string   `yaml:"dockerfilePath"`
+	DockerfilePath           string   `yaml:"dockerfilePath,omitempty"`
+	DockerfileOverride       string   `yaml:"dockerfileOverride,omitempty"`
 	BuildContextRelativePath string   `yaml:"buildContextRelativePath"`
 	BuildArgs                []string `yaml:"buildArgs"`
 	GitRepoPath              string   `yaml:"gitRepoPath"`
@@ -149,9 +151,9 @@ func (c *Config) Validate() error {
 						ctx.Name,
 					)
 				}
-				if img.DockerfilePath == "" {
+				if img.DockerfilePath == "" && strings.TrimSpace(img.DockerfileOverride) == "" {
 					return fmt.Errorf(
-						"docker image '%s' for service '%s' in context '%s' has empty dockerFilePath",
+						"docker image '%s' for service '%s' in context '%s' must have either dockerfilePath or dockerfileOverride",
 						img.Name,
 						svc.Name,
 						ctx.Name,

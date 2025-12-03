@@ -99,6 +99,10 @@ func (h *BuildCommandHandler) Handle(services []string, selectedProfile string) 
 				)
 			}
 
+			if image.DockerfileOverride != "" {
+				fmt.Println("\033[2;36m  -> Using inline Dockerfile from configuration\033[0m")
+			}
+
 			if err := h.scm.Download(image.GitRepoPath, image.GitRef, image.Path); err != nil {
 				return err
 			}

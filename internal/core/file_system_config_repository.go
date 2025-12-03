@@ -355,6 +355,9 @@ func overlayDockerImage(baseImage *domain.DockerImage, overlayImage *domain.Dock
 	if overlayImage.DockerfilePath != "" {
 		baseImage.DockerfilePath = overlayImage.DockerfilePath
 	}
+	if overlayImage.DockerfileOverride != "" {
+		baseImage.DockerfileOverride = overlayImage.DockerfileOverride
+	}
 	if overlayImage.BuildArgs != nil {
 		baseImage.BuildArgs = append(baseImage.BuildArgs, overlayImage.BuildArgs...)
 	}

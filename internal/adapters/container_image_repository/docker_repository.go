@@ -31,10 +31,20 @@ func ProvideDockerRepository(
 }
 
 func (d *DockerRepository) BuildImage(image domain.DockerImage) error {
-	dockerFilePath := filepath.Join(image.Path, image.DockerfilePath)
 	contextPath := filepath.Join(image.Path, image.BuildContextRelativePath)
+
+	// Determine dockerfile path: use stdin ("-") for override, or file path
+	var dockerfilePath string
+	var dockerfileContent string
+	if image.DockerfileOverride != "" {
+		dockerfilePath = "-"
+		dockerfileContent = image.DockerfileOverride
+	} else {
+		dockerfilePath = filepath.Join(image.Path, image.DockerfilePath)
+	}
+
 	// Execute docker build command
-	args := []string{"build", "-t", image.Name, "-f", dockerFilePath}
+	args := []string{"build", "-t", image.Name, "-f", dockerfilePath}
 
 	templateValues, err := core.CreateTemplatingValues(d.configRepository, d.secretsRepository)
 	if err != nil {
@@ -57,6 +67,11 @@ func (d *DockerRepository) BuildImage(image domain.DockerImage) error {
 	cmd := exec.Command("docker", args...)
 	cmd.Stdout = &output
 	cmd.Stderr = &output
+
+	// If using dockerfile override, pipe the content via stdin
+	if dockerfileContent != "" {
+		cmd.Stdin = strings.NewReader(dockerfileContent)
+	}
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to build image: %v\n%s", err, output.String())

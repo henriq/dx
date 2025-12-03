@@ -165,6 +165,10 @@ services:
     remoteImages:
       - postgres:latest
 
+    # Optional: Service-level git configuration (inherited by dockerImages)
+    gitRepoPath: /path/to/git/repo
+    gitRef: main
+
     # Optional deployment profiles
     profiles:
       - dev
@@ -217,6 +221,37 @@ With this configuration:
 * `dx build` operates only on backend-api and frontend
 * `dx install -p infra` operates only on database and message-queue
 * `dx update -p all` operates on all four services
+
+### Dockerfile Override
+
+Instead of referencing an existing Dockerfile, you can define the Dockerfile content directly in your configuration using `dockerfileOverride`. This is useful when you need to customize a build without modifying the source repository.
+
+```yaml
+dockerImages:
+  - name: my-custom-image
+    dockerfileOverride: |
+      FROM alpine:latest
+      RUN apk add --no-cache curl
+      COPY . /app
+      WORKDIR /app
+      CMD ["./run.sh"]
+    buildContextRelativePath: .
+    gitRepoPath: /path/to/git/repo
+    gitRef: main
+```
+
+**Key points:**
+
+* Either `dockerfilePath` or `dockerfileOverride` must be specified
+* When both are specified, `dockerfileOverride` takes precedence
+* The override content is passed directly to Docker via stdin, so no temporary files are created
+* DX notifies you during the build when an override is active
+
+This feature is particularly useful for:
+
+* Testing build changes without committing to the repository
+* Customizing third-party images with additional dependencies
+* Overriding Dockerfiles in shared configurations via the import mechanism
 
 ### Local Services
 

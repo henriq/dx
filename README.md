@@ -1,125 +1,208 @@
-# DX - A developer experience tool
+# DX
 
-DX is a development experience tool that packages experiences and opinions about how an efficient
-local development environment should work.
+**The problem:** You have multiple microservices in a local Kubernetes cluster. You want to develop one service on your machine while it communicates with the others. Setting up this routing manually is tedious and error-prone.
 
-DX provides a standardized way of defining how applications are built and deployed. It uses
-Kubernetes and Helm to run services, and builds images with Docker. Integration with services running locally is
-provided by patching kubernetes services to intercept all traffic in a proxy server, that monitors local ports for
-local versions of running services, and provides routing decisions based on health checks. The proxy server also
-intercepts HTTP traffic between services and provides an interface for inspecting traffic.
+**What DX does:** DX connects your locally-running services to your Kubernetes cluster. Traffic meant for your service gets routed to your machine; everything else stays in the cluster. You can inspect HTTP traffic between services in a web UI.
+
+## Quick Example
+
+You have 5 services deployed to Kubernetes: `api`, `auth`, `users`, `payments`, and `notifications`.
+
+To work on `api` locally:
+
+```bash
+# Deploy all services to your local Kubernetes cluster
+dx install
+
+# Start your api service locally on port 8080
+./run-api-locally.sh
+
+# DX detects your local service and routes cluster traffic to it
+# Other services in Kubernetes now talk to your local api
+```
+
+Run `dx context info` to get the mitmweb (traffic inspection UI) URL where you can see every HTTP request flowing between services.
+
+## How It Works
+
+DX runs a proxy inside your Kubernetes cluster that intercepts service-to-service traffic:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Kubernetes Cluster                                             │
+│                                                                 │
+│  ┌──────────┐     ┌──────────┐     ┌──────────┐                │
+│  │  auth    │     │  users   │     │ payments │                │
+│  └────┬─────┘     └────┬─────┘     └────┬─────┘                │
+│       │                │                │                       │
+│       └────────────────┼────────────────┘                       │
+│                        │                                        │
+│                        ▼                                        │
+│              ┌──────────────────┐                               │
+│              │    dev-proxy     │◄─── Intercepts traffic        │
+│              │                  │     to local services         │
+│              └────────┬─────────┘                               │
+│                       │                                         │
+└───────────────────────┼─────────────────────────────────────────┘
+                        │
+                        ▼ Health check passes?
+              ┌─────────────────────┐
+              │  Your local machine │
+              │                     │
+              │  api service :8080  │◄─── Traffic routed here
+              └─────────────────────┘
+```
+
+**The routing logic:**
+
+1. DX patches Kubernetes services to route traffic through the proxy
+2. The proxy checks if your local service is running (via health check)
+3. If local service is healthy: traffic goes to your machine
+4. If local service is down: traffic goes to the Kubernetes version
+5. The proxy captures all HTTP traffic for inspection in mitmweb
 
 ## Prerequisites
 
-To use DX, you'll need:
+DX assumes you already have a local Kubernetes cluster running.
 
 **Kubernetes Environment:**
-* A local Kubernetes cluster (e.g., Docker Desktop or Rancher Desktop)
-* Docker client connected to the cluster's Docker daemon to ensure built images are accessible
+- A local Kubernetes cluster (Docker Desktop, Rancher Desktop, minikube, etc.)
+- Docker client connected to the cluster's Docker daemon
 
 **Required Tools:**
-The following command-line tools must be installed and available in your PATH:
-* `kubectl`
-* `helm`
-* `git`
-* `bash`
-* `docker`
+- `kubectl`
+- `helm`
+- `git`
+- `docker`
+- `bash`
 
 ## Installation
 
 ### Homebrew
 
-Install DX with Homebrew by tapping the homebrew cask with `brew tap henriq/dx`. Then install DX with `brew install dx`.
+```bash
+brew tap henriq/dx
+brew install dx
+```
 
 ### Manual Installation
 
 Download the latest release from the [releases page](https://github.com/henriq/dx/releases) and extract it to a directory in your PATH.
 
-### Windows Considerations
+### Windows
 
-* **Line Ending Management** - When running on Windows, DX will have issues if it's line endings are converted to clrf. Line ending conversion can be disabled by running:
+When running on Windows, disable line ending conversion:
 
 ```bash
 git config --global core.autocrlf false
 ```
 
-## Shell Completion
-
-DX supports command completion for various shells. Set it up for your preferred shell:
-
-### Bash
+## Quick Start
 
 ```bash
-# Add to ~/.bashrc or ~/.bash_profile
-source <(dx completion bash)
-```
-
-### Zsh
-
-```zsh
-# Add to ~/.zshrc
-source <(dx completion zsh)
-```
-
-### Fish
-
-```fish
-# Add to ~/.config/fish/config.fish
-dx completion fish | source
-```
-
-### PowerShell
-
-```powershell
-# Add to your PowerShell profile
-dx completion powershell | Out-String | Invoke-Expression
-```
-
-## Usage
-
-```bash
-# Initialize a new configuration
+# 1. Create your configuration file
 dx initialize
 
-# Switch between contexts
-dx context set [context-name]
+# 2. Edit ~/.dx-config.yaml to define your services
+#    (see Configuration section below)
 
-# Build Docker images
-dx build [service-name]
+# 3. Build and deploy everything
+dx update
 
-# Install services to Kubernetes
-dx install [service-name]
-
-# Update deployed services
-dx update [service-name]
-
-# Uninstalls services from Kubernetes
-dx uninstall [service-name]
-
-# Run custom scripts
-dx run [script-name]
-```
-
-### Monitoring traffic
-
-DX's dev-proxy provides an interface for inspecting HTTP traffic between services.
-
-```bash
-# View context configuration and service status
+# 4. View your environment status
 dx context info
 ```
 
-This command displays:
+## Commands
 
-* Configuration overview for the current context
-* Services being intercepted by the dev-proxy
-* Links to monitoring interfaces:
-  * HAProxy status page - Shows traffic routing and service health
-  * Mitmweb interface - Displays HTTP traffic between services
+### Core Workflow
+
+| Command | Description |
+|---------|-------------|
+| `dx build [services...]` | Build Docker images for services |
+| `dx install [services...]` | Deploy services to Kubernetes via Helm |
+| `dx uninstall [services...]` | Remove services from Kubernetes |
+| `dx update [services...]` | Build and deploy in one step |
+
+All commands accept:
+- **No arguments**: Operates on services in the default profile
+- **Service names**: Operates only on specified services
+- **`-p, --profile`**: Target a specific profile (`-p all` for everything)
+
+### Context Management
+
+Contexts let you work with multiple projects from a single configuration file.
+
+```bash
+dx context list              # Show all available contexts
+dx context set <name>        # Switch to a different context
+dx context info              # Display current context and monitoring URLs
+dx context print             # Output current context as JSON
+```
+
+### Secrets
+
+Secrets are encrypted with AES-GCM and stored per-context. Keys are kept in your system keyring.
+
+```bash
+dx secret set <key> <value>  # Store an encrypted secret
+dx secret get <key>          # Retrieve a secret value
+dx secret list               # List all secrets
+dx secret delete <key>       # Remove a secret
+```
+
+### Utilities
+
+```bash
+dx initialize                # Create sample configuration file
+dx run <script>              # Execute scripts defined in your context
+dx gen-env-key               # Generate cluster verification key
+dx version                   # Show version
+```
+
+## Common Workflows
+
+### Daily Development
+
+```bash
+# Rebuild and redeploy a single service
+dx update api
+
+# Check what's running
+dx context info
+```
+
+### Working with Profiles
+
+Profiles group services for targeted operations:
+
+```bash
+# Deploy only infrastructure
+dx install -p infra
+
+# Work on application services
+dx update -p default
+
+# Tear down everything
+dx uninstall -p all
+```
+
+### Multi-Project Setup
+
+```bash
+# List your configured projects
+dx context list
+
+# Switch projects
+dx context set backend-services
+
+# All commands now operate on the new context
+dx update
+```
 
 ## Configuration
 
-DX uses a YAML configuration file at `~/.dx-config.yaml` organized into contexts (projects).
+DX uses `~/.dx-config.yaml` to define your development environment.
 
 ### Basic Structure
 
@@ -127,252 +210,196 @@ DX uses a YAML configuration file at `~/.dx-config.yaml` organized into contexts
 contexts:
   - name: my-project
     services:
-      - name: api-service
-        # Service configuration...
+      - name: api
+        # How to build and deploy this service
     localServices:
-      - name: frontend
-        # Local service configuration...
+      - name: api
+        # How to route traffic to your local version
     scripts:
-      my-script: echo "Running my script"
+      reset-db: kubectl delete pvc -l app=postgres
 ```
 
 ### Services
 
-Services define components that DX manages in Kubernetes:
+Services define what DX builds and deploys to Kubernetes:
 
 ```yaml
 services:
-  - name: my-service
-    # Helm deployment configuration
+  - name: api
+    # Helm deployment
     helmRepoPath: /path/to/helm/repo
-    helmChartRelativePath: charts/my-service
+    helmChartRelativePath: charts/api
     helmBranch: main
     helmArgs:
       - --set=image.tag=latest
-    localPort: 8080
 
-    # Docker image configuration
+    # Docker build
     dockerImages:
-      - name: my-image
+      - name: api:latest
         dockerfilePath: Dockerfile
         buildContextRelativePath: .
-        buildArgs:
-          - VERSION=1.0.0
-        gitRepoPath: /path/to/git/repo
+        gitRepoPath: /path/to/source
         gitRef: main
 
-    # External images to pull
+    # Images to pull (not build)
     remoteImages:
-      - postgres:latest
+      - postgres:15
+      - redis:7
 
-    # Optional: Service-level git configuration (inherited by dockerImages)
-    gitRepoPath: /path/to/git/repo
-    gitRef: main
-
-    # Optional deployment profiles
+    # Which profiles include this service
     profiles:
-      - dev
+      - default
 ```
+
+### Local Services
+
+Local services tell DX how to route traffic to your machine:
+
+```yaml
+localServices:
+  - name: api
+    localPort: 8080           # Where your local service runs
+    kubernetesPort: 80        # The Kubernetes service port
+    healthCheckPath: /health  # How to check if local is running
+    selector:
+      app: api                # Must match the Kubernetes service
+```
+
+When you run a service locally on `localPort`, DX automatically routes cluster traffic to your machine. If your local service stops responding to health checks, traffic falls back to the Kubernetes version.
 
 ### Profiles
 
-Profiles let you organize services into groups for targeted operations:
-
-```bash
-# Build only services in the 'default' profile
-dx build
-
-# Install only services in the 'infra' profile
-dx install -p infra
-
-# Update all services regardless of profile
-dx update -p all
-```
-
-**How profiles work:**
-
-* Services must be **explicitly added** to profiles via configuration
-* Services can belong to multiple profiles if needed
-* Operations run only on services that match the specified profile
-* The special `all` profile includes every service and can be targeted with `-p all`
-* The special `default` profile is used if no profile is selected with `-p`
-
-**Example scenario:**
-
-Consider a project with four services configured with these profiles:
+Profiles let you operate on subsets of services:
 
 ```yaml
 services:
-  - name: database
+  - name: postgres
     profiles: [infra]
-    # other configuration...
-  - name: message-queue
+  - name: redis
     profiles: [infra]
-    # other configuration...
-  - name: backend-api
+  - name: api
     profiles: [default]
-    # other configuration...
   - name: frontend
     profiles: [default]
-    # other configuration...
 ```
 
-With this configuration:
-* `dx build` operates only on backend-api and frontend
-* `dx install -p infra` operates only on database and message-queue
-* `dx update -p all` operates on all four services
+```bash
+dx build              # Builds api, frontend (default profile)
+dx install -p infra   # Deploys postgres, redis
+dx update -p all      # Everything
+```
 
 ### Dockerfile Override
 
-Instead of referencing an existing Dockerfile, you can define the Dockerfile content directly in your configuration using `dockerfileOverride`. This is useful when you need to customize a build without modifying the source repository.
+Define Dockerfile content directly in configuration:
 
 ```yaml
 dockerImages:
-  - name: my-custom-image
+  - name: my-image
     dockerfileOverride: |
       FROM alpine:latest
       RUN apk add --no-cache curl
       COPY . /app
-      WORKDIR /app
       CMD ["./run.sh"]
     buildContextRelativePath: .
-    gitRepoPath: /path/to/git/repo
+    gitRepoPath: /path/to/source
     gitRef: main
 ```
 
-**Key points:**
+Useful for testing build changes without modifying the source repository.
 
-* Either `dockerfilePath` or `dockerfileOverride` must be specified
-* When both are specified, `dockerfileOverride` takes precedence
-* The override content is passed directly to Docker via stdin, so no temporary files are created
-* DX notifies you during the build when an override is active
+### Secrets in Configuration
 
-This feature is particularly useful for:
-
-* Testing build changes without committing to the repository
-* Customizing third-party images with additional dependencies
-* Overriding Dockerfiles in shared configurations via the import mechanism
-
-### Local Services
-
-Local services define how DX routes traffic between Kubernetes and your local machine:
-
-```yaml
-localServices:
-  - name: my-local-service
-    localPort: 8080
-    kubernetesPort: 80
-    healthCheckPath: /health
-    selector:
-      app: my-app
-```
-
-The name and selector of the local service must match the Kubernetes service that is being
-intercepted for the local service to work.
-
-### Custom Scripts
-
-DX allows you to define custom scripts in your configuration file that can be executed with the `run` command:
-
-```yaml
-scripts:
-  example: |
-    echo "write something"
-    read foo
-    echo "you wrote $foo"
-```
-
-These scripts can read from stdin and interact with the user:
-
-```bash
-# Run a custom script named 'example'
-dx run example
-```
-
-The example above would prompt the user to type something, read the input into a variable called `foo`, and then echo back what was typed.
-
-### Secrets Management
-
-DX provides secure secrets handling, with encryption using AES-GCM and keys stored in your system's keyring.
-
-```bash
-# Set a secret
-dx secret set api-key "my-secret-value"
-
-# Get a secret
-dx secret get api-key
-
-# List all secrets
-dx secret list
-
-# Delete a secret
-dx secret delete api-key
-```
-
-You can reference secrets in Helm charts:
+Reference secrets in Helm arguments:
 
 ```yaml
 helmArgs:
-  - --set
-  - mySecretValue={{.Secrets.api-key}}
+  - --set=database.password={{.Secrets.DB_PASSWORD}}
 ```
 
-### Context Switching
+```bash
+dx secret set DB_PASSWORD "s3cr3t"
+dx install
+```
 
-Manage multiple projects by switching contexts:
+### Custom Scripts
+
+Define reusable commands:
+
+```yaml
+scripts:
+  reset-db: |
+    kubectl delete pvc -l app=postgres
+    dx uninstall postgres
+    dx install postgres
+  logs: kubectl logs -f deployment/api
+```
 
 ```bash
-# List available contexts
-dx context
-
-# Switch to a specific context
-dx context my-project
+dx run reset-db
+dx run logs
 ```
 
 ## Advanced Topics
 
 ### Configuration Sharing
 
-Teams can share configurations by importing context files:
-
-```yaml
-contexts:
-  - name: my-context
-    import: /path/to/shared-context.yaml
-```
-
-You can override specific values from the imported configuration:
+Teams can share base configurations:
 
 ```yaml
 contexts:
   - name: my-context
     import: /path/to/shared-context.yaml
     services:
-      - name: my-service
+      - name: api
         dockerImages:
-          - name: my-image
-            gitRef: custom-branch
+          - name: api
+            gitRef: my-feature-branch  # Override specific values
 ```
 
-### Development Workflow
+### Inspecting Traffic
 
-A typical development workflow with DX:
+The dev-proxy includes mitmproxy for HTTP inspection. Run `dx context info` to get the URL.
 
-1. Configure your services in `~/.dx-config.yaml`
-2. Build images with `dx build`
-3. Deploy to Kubernetes with `dx install`
-4. Run specific services locally while testing
-5. DX automatically routes traffic between local and Kubernetes services
-6. Update deployments with `dx update` when needed
+You can see:
+- All HTTP requests between services
+- Request/response headers and bodies
+- Timing information
+
+### Environment Verification
+
+DX tracks which Kubernetes cluster/namespace you're working with:
+
+```bash
+# Generate a key for current cluster config
+dx gen-env-key
+
+# DX warns you if cluster config changes unexpectedly
+```
+
+### Shell Completion
+
+```bash
+# Bash
+source <(dx completion bash)
+
+# Zsh
+source <(dx completion zsh)
+
+# Fish
+dx completion fish | source
+
+# PowerShell
+dx completion powershell | Out-String | Invoke-Expression
+```
 
 ### Local File Storage
 
-DX creates and manages several files in the `~/.dx` directory:
-
-* **Repository Clones** - Local copies of all project repositories and Helm charts specified in your configuration
-* **Encrypted Secrets** - Encrypted secrets for each project context
-* **Dev Proxy Configuration** - Configuration files for the dev-proxy that handles traffic routing
+DX stores data in `~/.dx/`:
+- Repository clones
+- Encrypted secrets
+- Dev-proxy configuration
 
 ### Uninstallation
 
-To uninstall DX, remove all files under `~/.dx` and remove the `dx` binary from your system.
+Remove `~/.dx/` and the `dx` binary.

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"dx/internal/cli/output"
 	"dx/internal/core"
 	"dx/internal/ports"
 )
@@ -36,5 +37,10 @@ func (h *GenEnvKeyCommandHandler) Handle() error {
 		return fmt.Errorf("failed to generate environment key: %v", err)
 	}
 	envKeyPath := filepath.Join("~", ".dx", configContext.Name, "env-key")
-	return h.fileSystem.WriteFile(envKeyPath, []byte(envKey), ports.ReadWrite)
+	err = h.fileSystem.WriteFile(envKeyPath, []byte(envKey), ports.ReadWrite)
+	if err != nil {
+		return err
+	}
+	output.PrintSuccess("Environment key generated")
+	return nil
 }

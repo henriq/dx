@@ -9,14 +9,29 @@ import (
 var skipDevProxy *bool
 
 func init() {
-	skipDevProxy = installCmd.Flags().BoolP("skip-dev-proxy,", "s", false, "Skip dev proxy installation")
+	skipDevProxy = installCmd.Flags().BoolP("skip-dev-proxy", "s", false, "Skip dev proxy installation")
 	rootCmd.AddCommand(installCmd)
 }
 
 var installCmd = &cobra.Command{
-	Use:               "install [service...]",
-	Short:             "Installs the application",
-	Long:              `Installs the selected services if arguments are supplied, otherwise installs all services`,
+	Use:   "install [service...]",
+	Short: "Deploy services to Kubernetes via Helm",
+	Long: `Deploys the specified services to the local Kubernetes cluster using Helm.
+If no services are specified, deploys all services in the current profile.
+
+This command also sets up the dev-proxy for routing traffic between local
+and Kubernetes services (unless --skip-dev-proxy is specified).`,
+	Example: `  # Install all services in the default profile
+  dx install
+
+  # Install specific services
+  dx install api database
+
+  # Install without dev-proxy setup
+  dx install --skip-dev-proxy
+
+  # Install all services regardless of profile
+  dx install -p all`,
 	Args:              ServiceArgsValidator,
 	ValidArgsFunction: ServiceArgsCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {

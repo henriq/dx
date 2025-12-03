@@ -19,6 +19,9 @@ otherwise builds and reinstalls all services`,
 	ValidArgsFunction: ServiceArgsCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		buildHandler, err := app.InjectBuildCommandHandler()
+		if err != nil {
+			return err
+		}
 		installHandler, err := app.InjectInstallCommandHandler()
 		if err != nil {
 			return err

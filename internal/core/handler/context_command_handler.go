@@ -1,10 +1,12 @@
 package handler
 
 import (
-	"dx/internal/core"
-	"dx/internal/ports"
 	"encoding/json"
 	"fmt"
+
+	"dx/internal/cli/output"
+	"dx/internal/core"
+	"dx/internal/ports"
 )
 
 type ContextCommandHandler struct {
@@ -33,7 +35,12 @@ func (h *ContextCommandHandler) HandleSet(contextName string) error {
 	if !config.ContextExists(contextName) {
 		return fmt.Errorf("context not found: %s", contextName)
 	}
-	return h.configRepository.SaveCurrentContextName(contextName)
+	err = h.configRepository.SaveCurrentContextName(contextName)
+	if err != nil {
+		return err
+	}
+	output.PrintSuccess(fmt.Sprintf("Switched to context '%s'", contextName))
+	return nil
 }
 
 func (h *ContextCommandHandler) HandleList() error {

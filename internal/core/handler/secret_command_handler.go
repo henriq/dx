@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	"dx/internal/cli/output"
 	"dx/internal/core"
 	"dx/internal/core/domain"
 )
@@ -47,7 +48,12 @@ func (h *SecretCommandHandler) HandleSet(key string, value string) error {
 		)
 	}
 
-	return h.secretsRepository.SaveSecrets(secrets, configContextName)
+	err = h.secretsRepository.SaveSecrets(secrets, configContextName)
+	if err != nil {
+		return err
+	}
+	output.PrintSuccess(fmt.Sprintf("Secret '%s' saved", key))
+	return nil
 }
 
 func (h *SecretCommandHandler) HandleList() error {
@@ -86,5 +92,10 @@ func (h *SecretCommandHandler) HandleDelete(key string) error {
 			newSecrets = append(newSecrets, secret)
 		}
 	}
-	return h.secretsRepository.SaveSecrets(newSecrets, configContextName)
+	err = h.secretsRepository.SaveSecrets(newSecrets, configContextName)
+	if err != nil {
+		return err
+	}
+	output.PrintSuccess(fmt.Sprintf("Secret '%s' deleted", key))
+	return nil
 }

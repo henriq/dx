@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 
+	"dx/internal/cli/output"
 	"dx/internal/core"
 	"dx/internal/core/domain"
 )
@@ -25,7 +26,7 @@ func (h *InitializeCommandHandler) Handle() error {
 		return err
 	}
 	if configExists {
-		return fmt.Errorf("configRepository already exists")
+		return fmt.Errorf("configuration already exists at ~/.dx-config.yaml")
 	}
 	config := domain.CreateDefaultConfig()
 	err = h.configRepository.SaveConfig(&config)
@@ -33,5 +34,6 @@ func (h *InitializeCommandHandler) Handle() error {
 		return err
 	}
 
+	output.PrintSuccess("Configuration created at ~/.dx-config.yaml")
 	return nil
 }

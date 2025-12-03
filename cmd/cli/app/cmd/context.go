@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"dx/cmd/cli/app"
+	"dx/internal/cli/output"
 	"dx/internal/core/domain"
 
 	"github.com/spf13/cobra"
@@ -68,9 +69,9 @@ var contextInfoCmd = &cobra.Command{
 			return fmt.Errorf("error loading current configuration context: %v", err)
 		}
 
-		fmt.Println("Current context: " + bold(configContext.Name))
+		fmt.Println("Current context: " + output.Bold(configContext.Name))
 		fmt.Println()
-		fmt.Printf(bold("%-30s %-30s\n"), "Service", "Profiles")
+		fmt.Printf("%s\n", output.Header(fmt.Sprintf("%-30s %-30s", "Service", "Profiles")))
 
 		slices.SortFunc(
 			configContext.Services, func(a, b domain.Service) int {
@@ -84,13 +85,15 @@ var contextInfoCmd = &cobra.Command{
 		fmt.Println()
 
 		fmt.Printf(
-			bold("%-30s %-12s %-16s %-30s %-30s %-50s\n"),
-			"Local service",
-			"Local port",
-			"Kubernetes port",
-			"Health check",
-			"Selector",
-			"Ingress",
+			"%s\n",
+			output.Header(fmt.Sprintf("%-30s %-12s %-16s %-30s %-30s %-50s",
+				"Local service",
+				"Local port",
+				"Kubernetes port",
+				"Health check",
+				"Selector",
+				"Ingress",
+			)),
 		)
 
 		slices.SortFunc(
@@ -112,7 +115,7 @@ var contextInfoCmd = &cobra.Command{
 		}
 		fmt.Println()
 		fmt.Println(
-			"Mitmproxy: " + bold(
+			"Mitmproxy: " + output.Bold(
 				fmt.Sprintf(
 					"http://dev-proxy.%s.localhost (password=%s)",
 					configContext.Name,
@@ -120,7 +123,7 @@ var contextInfoCmd = &cobra.Command{
 				),
 			),
 		)
-		fmt.Println("Haproxy stats: " + bold(fmt.Sprintf("http://stats.dev-proxy.%s.localhost", configContext.Name)))
+		fmt.Println("Haproxy stats: " + output.Bold(fmt.Sprintf("http://stats.dev-proxy.%s.localhost", configContext.Name)))
 		return nil
 	},
 }
@@ -145,10 +148,6 @@ func formatPort(port int) string {
 		return "-"
 	}
 	return strconv.Itoa(port)
-}
-
-func bold(text string) string {
-	return fmt.Sprintf("\033[1;37m%s\033[0m", text)
 }
 
 func getSortedProfiles(profiles []string) string {

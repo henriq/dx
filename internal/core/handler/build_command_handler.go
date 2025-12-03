@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"dx/internal/cli/output"
 	"dx/internal/core"
 	"dx/internal/core/domain"
 	"dx/internal/ports"
@@ -72,16 +73,18 @@ func (h *BuildCommandHandler) Handle(services []string, selectedProfile string) 
 			},
 		)
 
-		fmt.Println("\033[1;37mBuilding docker images\033[0m")
+		output.PrintHeader("Building docker images")
 		fmt.Println()
 		fmt.Printf(
-			"\033[1;37m%-*s%-*s%-*s\033[0m\n",
-			maxDockerImageNameLength,
-			"Image",
-			maxGitRepoPathLength,
-			"Repo",
-			maxGitBranchLength,
-			"Ref",
+			"%s\n",
+			output.Header(fmt.Sprintf("%-*s%-*s%-*s",
+				maxDockerImageNameLength,
+				"Image",
+				maxGitRepoPathLength,
+				"Repo",
+				maxGitBranchLength,
+				"Ref",
+			)),
 		)
 
 		for _, image := range dockerImagesToBuild {
@@ -100,7 +103,7 @@ func (h *BuildCommandHandler) Handle(services []string, selectedProfile string) 
 			}
 
 			if image.DockerfileOverride != "" {
-				fmt.Println("\033[2;36m  -> Using inline Dockerfile from configuration\033[0m")
+				output.PrintSecondary("Using inline Dockerfile from configuration")
 			}
 
 			if err := h.scm.Download(image.GitRepoPath, image.GitRef, image.Path); err != nil {
@@ -117,12 +120,9 @@ func (h *BuildCommandHandler) Handle(services []string, selectedProfile string) 
 	if len(dockerImagesToPull) > 0 {
 		slices.Sort(dockerImagesToPull)
 
-		fmt.Println("\033[1;37mPulling docker images\033[0m")
+		output.PrintHeader("Pulling docker images")
 		fmt.Println()
-		fmt.Printf(
-			"\033[1;37m%s\033[0m\n",
-			"Image",
-		)
+		fmt.Println(output.Header("Image"))
 
 		for _, image := range dockerImagesToPull {
 			fmt.Println(image)

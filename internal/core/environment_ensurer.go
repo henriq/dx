@@ -37,7 +37,7 @@ func (ee *EnvironmentEnsurer) EnsureExpectedClusterIsSelected() error {
 	}
 
 	if envKey != currentKey {
-		return fmt.Errorf("environment key mismatch, please verify that the currect cluster and namespace are active or run 'gen-env-key' to update the env-key")
+		return fmt.Errorf("environment key mismatch, please verify that the correct cluster and namespace are active or run 'dx gen-env-key' to update the env-key")
 	}
 
 	return nil

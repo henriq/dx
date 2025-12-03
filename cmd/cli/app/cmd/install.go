@@ -11,9 +11,20 @@ func init() {
 }
 
 var uninstallCmd = &cobra.Command{
-	Use:               "uninstall [service...]",
-	Short:             "Uninstalls the application",
-	Long:              `Uninstalls the selected services if arguments are supplied, otherwise installs all services`,
+	Use:   "uninstall [service...]",
+	Short: "Remove services from Kubernetes",
+	Long: `Removes the specified services from the local Kubernetes cluster.
+If no services are specified, removes all services in the current profile.
+
+This uses Helm to uninstall the deployed releases.`,
+	Example: `  # Uninstall all services in the default profile
+  dx uninstall
+
+  # Uninstall specific services
+  dx uninstall api database
+
+  # Uninstall all services regardless of profile
+  dx uninstall -p all`,
 	Args:              ServiceArgsValidator,
 	ValidArgsFunction: ServiceArgsCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {

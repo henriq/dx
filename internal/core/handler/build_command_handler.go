@@ -31,9 +31,6 @@ func ProvideBuildCommandHandler(
 }
 
 func (h *BuildCommandHandler) Handle(services []string, selectedProfile string) error {
-	maxDockerImageNameLength := 0
-	maxGitRepoPathLength := 0
-	maxGitBranchLength := 0
 	var dockerImagesToBuild []domain.DockerImage
 	var dockerImagesToPull []string
 
@@ -51,19 +48,7 @@ func (h *BuildCommandHandler) Handle(services []string, selectedProfile string) 
 			continue
 		}
 
-		for _, image := range service.DockerImages {
-			if len(image.Name)+2 > maxDockerImageNameLength {
-				maxDockerImageNameLength = len(image.Name) + 2
-			}
-			if len(image.GitRepoPath)+2 > maxGitRepoPathLength {
-				maxGitRepoPathLength = len(image.GitRepoPath) + 2
-			}
-			if len(image.GitRef) > maxGitBranchLength {
-				maxGitBranchLength = len(image.GitRef)
-			}
-			dockerImagesToBuild = append(dockerImagesToBuild, image)
-		}
-
+		dockerImagesToBuild = append(dockerImagesToBuild, service.DockerImages...)
 		dockerImagesToPull = append(dockerImagesToPull, service.RemoteImages...)
 	}
 
@@ -74,7 +59,7 @@ func (h *BuildCommandHandler) Handle(services []string, selectedProfile string) 
 			},
 		)
 
-		output.PrintHeader("Building docker images")
+		output.PrintHeader("Building Docker images")
 		fmt.Println()
 
 		// Create progress tracker with repo/ref info
@@ -86,7 +71,7 @@ func (h *BuildCommandHandler) Handle(services []string, selectedProfile string) 
 				imageInfos[i] = fmt.Sprintf("%s @ %s", img.GitRepoPath, img.GitRef)
 			}
 		}
-		tracker := progress.NewTrackerWithInfo(imageNames, imageInfos)
+		tracker := progress.NewTrackerWithInfoAndVerb(imageNames, imageInfos, "Building")
 		tracker.Start()
 
 		var buildErr error
@@ -125,18 +110,18 @@ func (h *BuildCommandHandler) Handle(services []string, selectedProfile string) 
 		}
 
 		fmt.Println()
-		output.PrintSuccess(fmt.Sprintf("Built %d images", len(dockerImagesToBuild)))
+		output.PrintSuccess(fmt.Sprintf("Built %d Docker %s", len(dockerImagesToBuild), output.Plural(len(dockerImagesToBuild), "image", "images")))
 		fmt.Println()
 	}
 
 	if len(dockerImagesToPull) > 0 {
 		slices.Sort(dockerImagesToPull)
 
-		output.PrintHeader("Pulling docker images")
+		output.PrintHeader("Pulling Docker images")
 		fmt.Println()
 
 		// Create progress tracker for pulls
-		tracker := progress.NewTracker(dockerImagesToPull)
+		tracker := progress.NewTrackerWithVerb(dockerImagesToPull, "Pulling")
 		tracker.Start()
 
 		var pullErr error
@@ -161,7 +146,7 @@ func (h *BuildCommandHandler) Handle(services []string, selectedProfile string) 
 		}
 
 		fmt.Println()
-		output.PrintSuccess(fmt.Sprintf("Pulled %d images", len(dockerImagesToPull)))
+		output.PrintSuccess(fmt.Sprintf("Pulled %d Docker %s", len(dockerImagesToPull), output.Plural(len(dockerImagesToPull), "image", "images")))
 	}
 
 	return nil

@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"dx/internal/cli/output"
 	"dx/internal/core"
 	"dx/internal/core/domain"
 	"dx/internal/ports"
@@ -57,7 +58,7 @@ func (h *RunCommandHandler) Handle(scripts map[string]string, executionPlan []st
 			for _, service := range dependentServices {
 				dependentServiceNames = append(dependentServiceNames, service.Name)
 			}
-			fmt.Printf("Updating repositories for dependencies: %s\n", strings.Join(dependentServiceNames, ", "))
+			output.PrintStep(fmt.Sprintf("Updating repositories: %s", output.Dim(strings.Join(dependentServiceNames, ", "))))
 		}
 
 		for _, dependentService := range dependentServices {
@@ -74,6 +75,10 @@ func (h *RunCommandHandler) Handle(scripts map[string]string, executionPlan []st
 		if err != nil {
 			return err
 		}
+
+		output.PrintStep(fmt.Sprintf("Running %s", output.Bold(scriptName)))
+		fmt.Println()
+
 		cmd := exec.Command("bash", "-c", renderedScript)
 
 		cmd.Stdout = os.Stdout
@@ -81,8 +86,12 @@ func (h *RunCommandHandler) Handle(scripts map[string]string, executionPlan []st
 		cmd.Stdin = os.Stdin
 
 		if err := cmd.Run(); err != nil {
+			fmt.Println()
+			output.PrintError(fmt.Sprintf("Script '%s' failed", scriptName))
 			return fmt.Errorf("error running script %s: %v", scriptName, err)
 		}
+
+		fmt.Println()
 	}
 	return nil
 }

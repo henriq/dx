@@ -48,8 +48,6 @@ func (d *DevProxyManager) SaveConfiguration() error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("Creating dev-proxy configuration")
-
 	frontendPort := 8080
 	proxyPort := 18080
 	services := make([]map[string]interface{}, len(configContext.LocalServices))
@@ -208,7 +206,6 @@ func (d *DevProxyManager) BuildDevProxy() error {
 	}
 
 	for _, image := range dockerImages {
-		fmt.Printf("Building dev-proxy image %s\n", image.Name)
 		err = d.containerImageRepository.BuildImage(image)
 		if err != nil {
 			return fmt.Errorf("failed to build image %s: %w", image.Name, err)

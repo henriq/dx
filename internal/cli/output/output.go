@@ -110,22 +110,22 @@ func PrintHeader(text string) {
 
 // PrintSuccess prints a success message with checkmark
 func PrintSuccess(message string) {
-	fmt.Printf("%s %s\n", SymbolSuccess, Success(message))
+	fmt.Printf("%s %s\n", Success(SymbolSuccess), Success(message))
 }
 
-// PrintError prints an error message with X symbol
+// PrintError prints an error message with X symbol to stderr
 func PrintError(message string) {
-	fmt.Printf("%s %s\n", SymbolError, Error(message))
+	fmt.Fprintf(os.Stderr, "%s %s\n", Error(SymbolError), Error(message))
 }
 
-// PrintWarning prints a warning message with ! symbol
+// PrintWarning prints a warning message with ! symbol to stderr
 func PrintWarning(message string) {
-	fmt.Printf("%s %s\n", SymbolWarning, Warning(message))
+	fmt.Fprintf(os.Stderr, "%s %s\n", Warning(SymbolWarning), Warning(message))
 }
 
 // PrintInfo prints an info message with * symbol
 func PrintInfo(message string) {
-	fmt.Printf("%s %s\n", SymbolInfo, Info(message))
+	fmt.Printf("%s %s\n", Info(SymbolInfo), Info(message))
 }
 
 // PrintStep prints a step being executed with arrow
@@ -136,4 +136,12 @@ func PrintStep(message string) {
 // PrintSecondary prints secondary/supplementary information
 func PrintSecondary(message string) {
 	fmt.Printf("  %s %s\n", SymbolArrow, Secondary(message))
+}
+
+// Plural returns the singular or plural form based on count
+func Plural(count int, singular, plural string) string {
+	if count == 1 {
+		return singular
+	}
+	return plural
 }

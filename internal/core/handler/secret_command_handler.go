@@ -26,15 +26,18 @@ func ProvideSecretCommandHandler(
 
 func (h *SecretCommandHandler) HandleSet(key string, value string) error {
 	configContextName, err := h.configRepository.LoadCurrentContextName()
+	if err != nil {
+		return err
+	}
 	secrets, err := h.secretsRepository.LoadSecrets(configContextName)
 	if err != nil {
 		return err
 	}
 
 	var secretExists = false
-	for _, secret := range secrets {
-		if secret.Key == key {
-			secret.Value = value
+	for i := range secrets {
+		if secrets[i].Key == key {
+			secrets[i].Value = value
 			secretExists = true
 		}
 	}
@@ -65,7 +68,14 @@ func (h *SecretCommandHandler) HandleList() error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("Secrets:")
+
+	if len(secrets) == 0 {
+		output.PrintInfo("No secrets configured")
+		return nil
+	}
+
+	output.PrintHeader("Secrets")
+	fmt.Println()
 
 	// Sort secrets by key
 	sort.Slice(
@@ -74,7 +84,7 @@ func (h *SecretCommandHandler) HandleList() error {
 		},
 	)
 	for _, secret := range secrets {
-		fmt.Printf("  %s: %s\n", secret.Key, secret.Value)
+		fmt.Printf("  %s %s: %s\n", output.SymbolBullet, output.Bold(secret.Key), output.Dim(secret.Value))
 	}
 
 	return nil
@@ -82,6 +92,9 @@ func (h *SecretCommandHandler) HandleList() error {
 
 func (h *SecretCommandHandler) HandleDelete(key string) error {
 	configContextName, err := h.configRepository.LoadCurrentContextName()
+	if err != nil {
+		return err
+	}
 	secrets, err := h.secretsRepository.LoadSecrets(configContextName)
 	if err != nil {
 		return err

@@ -105,7 +105,6 @@ func (k *Kubernetes) CreateClusterEnvironmentKey() (string, error) {
 
 // InstallService Installs a service using helm
 func (k *Kubernetes) InstallService(service *domain.Service) error {
-	fmt.Println("Installing service", service.Name)
 	// Construct the helm install command
 	cmd := exec.Command(
 		"helm",
@@ -140,7 +139,6 @@ func (k *Kubernetes) InstallService(service *domain.Service) error {
 }
 
 func (k *Kubernetes) InstallDevProxy(service *domain.Service) error {
-	fmt.Println("Installing service", service.Name)
 	// Construct the helm install command
 	cmd := exec.Command(
 		"helm",
@@ -174,7 +172,6 @@ func (k *Kubernetes) InstallDevProxy(service *domain.Service) error {
 
 // UninstallService deletes a service using helm uninstall
 func (k *Kubernetes) UninstallService(service *domain.Service) error {
-	fmt.Println("Uninstalling service", service.Name)
 	// Construct the helm uninstall command
 	cmd := exec.Command("helm", "uninstall", service.Name)
 

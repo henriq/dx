@@ -48,8 +48,23 @@ func (h *ContextCommandHandler) HandleList() error {
 	if err != nil {
 		return err
 	}
+
+	currentContext, _ := h.configRepository.LoadCurrentContextName()
+
+	if len(config.Contexts) == 0 {
+		output.PrintInfo("No contexts configured")
+		return nil
+	}
+
+	output.PrintHeader("Contexts")
+	fmt.Println()
+
 	for _, context := range config.Contexts {
-		fmt.Println(context.Name)
+		if context.Name == currentContext {
+			fmt.Printf("  %s %s %s\n", output.SymbolArrow, output.Bold(context.Name), output.Dim("(current)"))
+		} else {
+			fmt.Printf("  %s %s\n", output.SymbolBullet, context.Name)
+		}
 	}
 	return nil
 }

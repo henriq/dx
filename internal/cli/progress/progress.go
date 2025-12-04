@@ -32,19 +32,28 @@ type Item struct {
 // Tracker manages progress display for multiple sequential tasks
 type Tracker struct {
 	mu           sync.Mutex
+	wg           sync.WaitGroup
 	items        []Item
 	current      int
+	total        int
 	startTime    time.Time
 	isTTY        bool
 	useColor     bool
 	stopChan     chan struct{}
+	stopOnce     sync.Once
 	spinnerFrame int
+	actionVerb   string // e.g., "Building", "Installing", "Pulling"
 }
 
 var spinnerFrames = []string{"◐", "◓", "◑", "◒"}
 
 // NewTracker creates a new progress tracker with names only
 func NewTracker(names []string) *Tracker {
+	return NewTrackerWithVerb(names, "Processing")
+}
+
+// NewTrackerWithVerb creates a new progress tracker with a custom action verb
+func NewTrackerWithVerb(names []string, verb string) *Tracker {
 	items := make([]Item, len(names))
 	for i, name := range names {
 		items[i] = Item{Name: name, Status: StatusPending}
@@ -54,16 +63,23 @@ func NewTracker(names []string) *Tracker {
 	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
 
 	return &Tracker{
-		items:    items,
-		current:  -1,
-		isTTY:    isTTY,
-		useColor: !noColor && isTTY,
-		stopChan: make(chan struct{}),
+		items:      items,
+		current:    -1,
+		total:      len(names),
+		isTTY:      isTTY,
+		useColor:   !noColor && isTTY,
+		stopChan:   make(chan struct{}),
+		actionVerb: verb,
 	}
 }
 
 // NewTrackerWithInfo creates a new progress tracker with names and additional info
 func NewTrackerWithInfo(names []string, infos []string) *Tracker {
+	return NewTrackerWithInfoAndVerb(names, infos, "Processing")
+}
+
+// NewTrackerWithInfoAndVerb creates a new progress tracker with names, info, and custom verb
+func NewTrackerWithInfoAndVerb(names []string, infos []string, verb string) *Tracker {
 	items := make([]Item, len(names))
 	for i, name := range names {
 		info := ""
@@ -77,17 +93,20 @@ func NewTrackerWithInfo(names []string, infos []string) *Tracker {
 	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
 
 	return &Tracker{
-		items:    items,
-		current:  -1,
-		isTTY:    isTTY,
-		useColor: !noColor && isTTY,
-		stopChan: make(chan struct{}),
+		items:      items,
+		current:    -1,
+		total:      len(names),
+		isTTY:      isTTY,
+		useColor:   !noColor && isTTY,
+		stopChan:   make(chan struct{}),
+		actionVerb: verb,
 	}
 }
 
 // Start begins tracking and starts the spinner animation if in TTY mode
 func (t *Tracker) Start() {
 	if t.isTTY {
+		t.wg.Add(1)
 		go t.animate()
 	}
 }
@@ -105,10 +124,11 @@ func (t *Tracker) StartItem(index int) {
 		// Non-TTY mode: print timestamped start message
 		ts := time.Now().Format("15:04:05")
 		item := t.items[index]
+		counter := fmt.Sprintf("[%d/%d]", index+1, t.total)
 		if item.Info != "" {
-			fmt.Printf("[%s] Building %s (%s)...\n", ts, item.Name, item.Info)
+			fmt.Printf("[%s] %s %s %s (%s)...\n", ts, counter, t.actionVerb, item.Name, item.Info)
 		} else {
-			fmt.Printf("[%s] Building %s...\n", ts, item.Name)
+			fmt.Printf("[%s] %s %s %s...\n", ts, counter, t.actionVerb, item.Name)
 		}
 	}
 }
@@ -147,7 +167,12 @@ func (t *Tracker) CompleteItem(index int, err error) {
 
 // Stop ends the progress tracking
 func (t *Tracker) Stop() {
-	close(t.stopChan)
+	t.stopOnce.Do(func() {
+		close(t.stopChan)
+	})
+
+	// Wait for animate goroutine to finish
+	t.wg.Wait()
 
 	if t.isTTY {
 		t.mu.Lock()
@@ -175,24 +200,17 @@ func (t *Tracker) GetStatus() string {
 
 	elapsed := time.Since(t.startTime)
 	spinner := spinnerFrames[t.spinnerFrame%len(spinnerFrames)]
-
-	displayName := item.Name
-	if item.Info != "" {
-		if t.useColor {
-			// Dim the info in parentheses
-			displayName = fmt.Sprintf("%s \033[2m(%s)\033[0m", item.Name, item.Info)
-		} else {
-			displayName = fmt.Sprintf("%s (%s)", item.Name, item.Info)
-		}
-	}
+	counter := fmt.Sprintf("[%d/%d]", t.current+1, t.total)
+	displayName := t.formatDisplayName(item)
 
 	if t.useColor {
-		return fmt.Sprintf("\033[2K\r  %s %s \033[2m%s\033[0m", spinner, displayName, formatDuration(elapsed))
+		return fmt.Sprintf("\033[2K\r  %s \033[2m%s\033[0m %s \033[2m%s\033[0m", spinner, counter, displayName, formatDuration(elapsed))
 	}
-	return fmt.Sprintf("\r  %s %s %s", spinner, displayName, formatDuration(elapsed))
+	return fmt.Sprintf("\r  %s %s %s %s", spinner, counter, displayName, formatDuration(elapsed))
 }
 
 func (t *Tracker) animate() {
+	defer t.wg.Done()
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -209,20 +227,13 @@ func (t *Tracker) animate() {
 
 				// Clear line and print status
 				item := t.items[t.current]
-				displayName := item.Name
-				if item.Info != "" {
-					if t.useColor {
-						// Dim the info in parentheses
-						displayName = fmt.Sprintf("%s \033[2m(%s)\033[0m", item.Name, item.Info)
-					} else {
-						displayName = fmt.Sprintf("%s (%s)", item.Name, item.Info)
-					}
-				}
+				counter := fmt.Sprintf("[%d/%d]", t.current+1, t.total)
+				displayName := t.formatDisplayName(item)
 
 				if t.useColor {
-					fmt.Printf("\033[2K\r  %s %s \033[2m%s\033[0m", spinner, displayName, formatDuration(elapsed))
+					fmt.Printf("\033[2K\r  %s \033[2m%s\033[0m %s \033[2m%s\033[0m", spinner, counter, displayName, formatDuration(elapsed))
 				} else {
-					fmt.Printf("\r  %s %s %s", spinner, displayName, formatDuration(elapsed))
+					fmt.Printf("\r  %s %s %s %s", spinner, counter, displayName, formatDuration(elapsed))
 				}
 			}
 			t.mu.Unlock()
@@ -233,6 +244,17 @@ func (t *Tracker) animate() {
 func (t *Tracker) printFinal() {
 	// Clear current line
 	fmt.Print("\033[2K\r")
+}
+
+// formatDisplayName formats the item name with optional info
+func (t *Tracker) formatDisplayName(item Item) string {
+	if item.Info == "" {
+		return item.Name
+	}
+	if t.useColor {
+		return fmt.Sprintf("%s \033[2m(%s)\033[0m", item.Name, item.Info)
+	}
+	return fmt.Sprintf("%s (%s)", item.Name, item.Info)
 }
 
 // PrintItemStart prints the start of an item (used with TTY for the status line)
@@ -280,48 +302,26 @@ func (t *Tracker) PrintItemComplete(index int) {
 		suffix = fmt.Sprintf("(%s) FAILED", formatDuration(item.Duration))
 	}
 
-	// Print the error details if present
-	if item.Error != nil {
-		// Print the completion line first, then the error
-		displayName := item.Name
-		if item.Info != "" {
-			if t.useColor {
-				displayName = fmt.Sprintf("%s \033[2m(%s)\033[0m", item.Name, item.Info)
-			} else {
-				displayName = fmt.Sprintf("%s (%s)", item.Name, item.Info)
-			}
-		}
-		if t.useColor {
-			suffix = fmt.Sprintf("\033[2m%s\033[0m", suffix)
-		}
-		fmt.Printf("  %s %s %s\n", sym, displayName, suffix)
+	counter := fmt.Sprintf("[%d/%d]", index+1, t.total)
+	displayName := t.formatDisplayName(item)
 
-		// Print error message
-		errMsg := item.Error.Error()
-		if t.useColor {
-			fmt.Printf("\n\033[31m%s\033[0m\n", errMsg)
-		} else {
-			fmt.Printf("\n%s\n", errMsg)
-		}
-		return
-	}
-
-	displayName := item.Name
-	if item.Info != "" {
-		if t.useColor {
-			// Dim the info in parentheses
-			displayName = fmt.Sprintf("%s \033[2m(%s)\033[0m", item.Name, item.Info)
-		} else {
-			displayName = fmt.Sprintf("%s (%s)", item.Name, item.Info)
-		}
-	}
-
-	// Dim the duration suffix as well
+	// Dim the counter and duration
 	if t.useColor {
+		counter = fmt.Sprintf("\033[2m%s\033[0m", counter)
 		suffix = fmt.Sprintf("\033[2m%s\033[0m", suffix)
 	}
 
-	fmt.Printf("  %s %s %s\n", sym, displayName, suffix)
+	fmt.Printf("  %s %s %s %s\n", sym, counter, displayName, suffix)
+
+	// Print error details if present
+	if item.Error != nil {
+		errMsg := item.Error.Error()
+		if t.useColor {
+			fmt.Fprintf(os.Stderr, "\n\033[31m%s\033[0m\n", errMsg)
+		} else {
+			fmt.Fprintf(os.Stderr, "\n%s\n", errMsg)
+		}
+	}
 }
 
 func formatDuration(d time.Duration) string {

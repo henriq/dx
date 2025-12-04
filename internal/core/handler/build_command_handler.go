@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"dx/internal/cli/output"
+	"dx/internal/cli/progress"
 	"dx/internal/core"
 	"dx/internal/core/domain"
 	"dx/internal/ports"
@@ -75,45 +76,56 @@ func (h *BuildCommandHandler) Handle(services []string, selectedProfile string) 
 
 		output.PrintHeader("Building docker images")
 		fmt.Println()
-		fmt.Printf(
-			"%s\n",
-			output.Header(fmt.Sprintf("%-*s%-*s%-*s",
-				maxDockerImageNameLength,
-				"Image",
-				maxGitRepoPathLength,
-				"Repo",
-				maxGitBranchLength,
-				"Ref",
-			)),
-		)
 
-		for _, image := range dockerImagesToBuild {
-			if image.GitRepoPath == "" && image.GitRef == "" {
-				fmt.Println(image.Name)
-			} else {
-				fmt.Printf(
-					"%-*s%-*s%-*s\n",
-					maxDockerImageNameLength,
-					image.Name,
-					maxGitRepoPathLength,
-					image.GitRepoPath,
-					maxGitBranchLength,
-					image.GitRef,
-				)
+		// Create progress tracker with repo/ref info
+		imageNames := make([]string, len(dockerImagesToBuild))
+		imageInfos := make([]string, len(dockerImagesToBuild))
+		for i, img := range dockerImagesToBuild {
+			imageNames[i] = img.Name
+			if img.GitRepoPath != "" && img.GitRef != "" {
+				imageInfos[i] = fmt.Sprintf("%s @ %s", img.GitRepoPath, img.GitRef)
 			}
+		}
+		tracker := progress.NewTrackerWithInfo(imageNames, imageInfos)
+		tracker.Start()
 
+		var buildErr error
+		for i, image := range dockerImagesToBuild {
+			tracker.StartItem(i)
+
+			// Show dockerfile override note (only in non-TTY mode, TTY shows spinner)
 			if image.DockerfileOverride != "" {
 				output.PrintSecondary("Using inline Dockerfile from configuration")
 			}
 
+			// Download source
 			if err := h.scm.Download(image.GitRepoPath, image.GitRef, image.Path); err != nil {
-				return err
+				tracker.CompleteItem(i, err)
+				tracker.PrintItemComplete(i)
+				buildErr = err
+				break
 			}
 
+			// Build image
 			if err := h.containerImageRepository.BuildImage(image); err != nil {
-				return err
+				tracker.CompleteItem(i, err)
+				tracker.PrintItemComplete(i)
+				buildErr = err
+				break
 			}
+
+			tracker.CompleteItem(i, nil)
+			tracker.PrintItemComplete(i)
 		}
+
+		tracker.Stop()
+
+		if buildErr != nil {
+			return buildErr
+		}
+
+		fmt.Println()
+		output.PrintSuccess(fmt.Sprintf("Built %d images", len(dockerImagesToBuild)))
 		fmt.Println()
 	}
 
@@ -122,14 +134,34 @@ func (h *BuildCommandHandler) Handle(services []string, selectedProfile string) 
 
 		output.PrintHeader("Pulling docker images")
 		fmt.Println()
-		fmt.Println(output.Header("Image"))
 
-		for _, image := range dockerImagesToPull {
-			fmt.Println(image)
+		// Create progress tracker for pulls
+		tracker := progress.NewTracker(dockerImagesToPull)
+		tracker.Start()
+
+		var pullErr error
+		for i, image := range dockerImagesToPull {
+			tracker.StartItem(i)
+
 			if err := h.containerImageRepository.PullImage(image); err != nil {
-				return err
+				tracker.CompleteItem(i, err)
+				tracker.PrintItemComplete(i)
+				pullErr = err
+				break
 			}
+
+			tracker.CompleteItem(i, nil)
+			tracker.PrintItemComplete(i)
 		}
+
+		tracker.Stop()
+
+		if pullErr != nil {
+			return pullErr
+		}
+
+		fmt.Println()
+		output.PrintSuccess(fmt.Sprintf("Pulled %d images", len(dockerImagesToPull)))
 	}
 
 	return nil

@@ -45,7 +45,7 @@ type Tracker struct {
 	actionVerb   string // e.g., "Building", "Installing", "Pulling"
 }
 
-var spinnerFrames = []string{"◐", "◓", "◑", "◒"}
+var spinnerFrames = []string{"·", "✦", "✶", "✸", "✹", "❋", "✹", "✸", "✶", "✦"}
 
 // NewTracker creates a new progress tracker with names only
 func NewTracker(names []string) *Tracker {
@@ -201,17 +201,20 @@ func (t *Tracker) GetStatus() string {
 	elapsed := time.Since(t.startTime)
 	spinner := spinnerFrames[t.spinnerFrame%len(spinnerFrames)]
 	counter := fmt.Sprintf("[%d/%d]", t.current+1, t.total)
-	displayName := t.formatDisplayName(item)
 
 	if t.useColor {
-		return fmt.Sprintf("\033[2K\r  %s \033[2m%s\033[0m %s \033[2m%s\033[0m", spinner, counter, displayName, formatDuration(elapsed))
+		if item.Info != "" {
+			return fmt.Sprintf("\033[2K\r  \033[1m%s %s  %s\033[0m  \033[2m(%s)  %s\033[0m", spinner, counter, item.Name, item.Info, formatDuration(elapsed))
+		}
+		return fmt.Sprintf("\033[2K\r  \033[1m%s %s  %s\033[0m  \033[2m%s\033[0m", spinner, counter, item.Name, formatDuration(elapsed))
 	}
-	return fmt.Sprintf("\r  %s %s %s %s", spinner, counter, displayName, formatDuration(elapsed))
+	displayName := t.formatDisplayName(item)
+	return fmt.Sprintf("\r  %s %s  %s  %s", spinner, counter, displayName, formatDuration(elapsed))
 }
 
 func (t *Tracker) animate() {
 	defer t.wg.Done()
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
@@ -228,12 +231,16 @@ func (t *Tracker) animate() {
 				// Clear line and print status
 				item := t.items[t.current]
 				counter := fmt.Sprintf("[%d/%d]", t.current+1, t.total)
-				displayName := t.formatDisplayName(item)
 
 				if t.useColor {
-					fmt.Printf("\033[2K\r  %s \033[2m%s\033[0m %s \033[2m%s\033[0m", spinner, counter, displayName, formatDuration(elapsed))
+					if item.Info != "" {
+						fmt.Printf("\033[2K\r  \033[1m%s %s  %s\033[0m  \033[2m(%s)  %s\033[0m", spinner, counter, item.Name, item.Info, formatDuration(elapsed))
+					} else {
+						fmt.Printf("\033[2K\r  \033[1m%s %s  %s\033[0m  \033[2m%s\033[0m", spinner, counter, item.Name, formatDuration(elapsed))
+					}
 				} else {
-					fmt.Printf("\r  %s %s %s %s", spinner, counter, displayName, formatDuration(elapsed))
+					displayName := t.formatDisplayName(item)
+					fmt.Printf("\r  %s %s  %s  %s", spinner, counter, displayName, formatDuration(elapsed))
 				}
 			}
 			t.mu.Unlock()
@@ -311,7 +318,7 @@ func (t *Tracker) PrintItemComplete(index int) {
 		suffix = fmt.Sprintf("\033[2m%s\033[0m", suffix)
 	}
 
-	fmt.Printf("  %s %s %s %s\n", sym, counter, displayName, suffix)
+	fmt.Printf("  %s %s  %s  %s\n", sym, counter, displayName, suffix)
 
 	// Print error details if present
 	if item.Error != nil {

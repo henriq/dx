@@ -37,6 +37,7 @@ func TestUninstallCommandHandler_HandleUninstallsAllServices(t *testing.T) {
 	containerOrchestrator.On("UninstallService", mock.Anything).Return(nil)
 	containerOrchestrator.On("HasDeployedServices").Return(false, nil)
 	fileSystem := new(testutil.MockFileSystem)
+	fileSystem.On("HomeDir").Return("/home/test", nil)
 	containerImageRepository := new(testutil.MockContainerImageRepository)
 	devProxyManager := core.ProvideDevProxyManager(
 		configRepository,
@@ -90,6 +91,8 @@ func TestUninstallCommandHandler_HandleUninstallsOnlySelectedService(t *testing.
 	containerOrchestrator.On("UninstallService", &configContext.Services[0]).Return(nil)
 	containerOrchestrator.On("HasDeployedServices").Return(true, nil)
 	fileSystem := new(testutil.MockFileSystem)
+	// HomeDir is only called when dev-proxy is uninstalled, which happens when HasDeployedServices returns false
+	// In this test, HasDeployedServices returns true, so HomeDir won't be called
 	containerImageRepository := new(testutil.MockContainerImageRepository)
 	devProxyManager := core.ProvideDevProxyManager(
 		configRepository,
@@ -112,6 +115,5 @@ func TestUninstallCommandHandler_HandleUninstallsOnlySelectedService(t *testing.
 
 	assert.Nil(t, result)
 	containerImageRepository.AssertExpectations(t)
-	fileSystem.AssertExpectations(t)
 	containerOrchestrator.AssertExpectations(t)
 }

@@ -2,8 +2,6 @@ package handler
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
 	"regexp"
 	"strings"
 
@@ -18,6 +16,7 @@ type RunCommandHandler struct {
 	secretsRepository core.SecretsRepository
 	templater         ports.Templater
 	scm               ports.Scm
+	commandRunner     ports.CommandRunner
 }
 
 func ProvideRunCommandHandler(
@@ -25,12 +24,14 @@ func ProvideRunCommandHandler(
 	secretsRepository core.SecretsRepository,
 	templater ports.Templater,
 	scm ports.Scm,
+	commandRunner ports.CommandRunner,
 ) RunCommandHandler {
 	return RunCommandHandler{
 		configRepository:  configRepository,
 		secretsRepository: secretsRepository,
 		templater:         templater,
 		scm:               scm,
+		commandRunner:     commandRunner,
 	}
 }
 
@@ -79,13 +80,7 @@ func (h *RunCommandHandler) Handle(scripts map[string]string, executionPlan []st
 		output.PrintStep(fmt.Sprintf("Running %s", output.Bold(scriptName)))
 		fmt.Println()
 
-		cmd := exec.Command("bash", "-c", renderedScript)
-
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		cmd.Stdin = os.Stdin
-
-		if err := cmd.Run(); err != nil {
+		if err := h.commandRunner.RunInteractive("bash", "-c", renderedScript); err != nil {
 			fmt.Println()
 			output.PrintError(fmt.Sprintf("Script '%s' failed", scriptName))
 			return fmt.Errorf("error running script %s: %v", scriptName, err)

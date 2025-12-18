@@ -127,6 +127,13 @@ func (c *Config) Validate() error {
 		if ctx.Name == "" {
 			return fmt.Errorf("context at index %d has empty name", i)
 		}
+		// Validate context name doesn't contain path traversal characters
+		if strings.Contains(ctx.Name, "..") ||
+			strings.Contains(ctx.Name, "/") ||
+			strings.Contains(ctx.Name, "\\") ||
+			strings.Contains(ctx.Name, "\x00") {
+			return fmt.Errorf("context '%s' contains invalid characters (path traversal not allowed)", ctx.Name)
+		}
 
 		for j, svc := range ctx.Services {
 			if svc.Name == "" {

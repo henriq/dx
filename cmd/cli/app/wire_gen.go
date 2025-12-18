@@ -7,10 +7,12 @@
 package app
 
 import (
+	"dx/internal/adapters/command_runner"
 	"dx/internal/adapters/container_image_repository"
 	"dx/internal/adapters/container_orchestrator"
 	"dx/internal/adapters/filesystem"
 	"dx/internal/adapters/keyring"
+	"dx/internal/adapters/kustomize"
 	"dx/internal/adapters/scm"
 	"dx/internal/adapters/symmetric_encryptor"
 	"dx/internal/adapters/templater"
@@ -47,9 +49,10 @@ func InjectBuildCommandHandler() (handler.BuildCommandHandler, error) {
 	secretsRepository := core.ProvideEncryptedFileSecretRepository(osFileSystem, portsKeyring, aesGcmEncryptor)
 	portsTemplater := templater.ProvideTextTemplater()
 	fileSystemConfigRepository := core.ProvideFileSystemConfigRepository(osFileSystem, secretsRepository, portsTemplater)
-	gitClient := scm.ProvideGitClient()
-	git := scm.ProvideGit(gitClient)
-	dockerRepository := container_image_repository.ProvideDockerRepository(fileSystemConfigRepository, secretsRepository, portsTemplater)
+	osCommandRunner := command_runner.ProvideOsCommandRunner()
+	gitClient := scm.ProvideGitClient(osCommandRunner, osFileSystem)
+	git := scm.ProvideGit(gitClient, osFileSystem)
+	dockerRepository := container_image_repository.ProvideDockerRepository(fileSystemConfigRepository, secretsRepository, portsTemplater, osCommandRunner)
 	buildCommandHandler := handler.ProvideBuildCommandHandler(fileSystemConfigRepository, git, dockerRepository)
 	return buildCommandHandler, nil
 }
@@ -61,15 +64,19 @@ func InjectInstallCommandHandler() (handler.InstallCommandHandler, error) {
 	secretsRepository := core.ProvideEncryptedFileSecretRepository(osFileSystem, portsKeyring, aesGcmEncryptor)
 	portsTemplater := templater.ProvideTextTemplater()
 	fileSystemConfigRepository := core.ProvideFileSystemConfigRepository(osFileSystem, secretsRepository, portsTemplater)
-	dockerRepository := container_image_repository.ProvideDockerRepository(fileSystemConfigRepository, secretsRepository, portsTemplater)
-	kubernetes, err := container_orchestrator.ProvideKubernetes(fileSystemConfigRepository, secretsRepository, portsTemplater)
+	osCommandRunner := command_runner.ProvideOsCommandRunner()
+	dockerRepository := container_image_repository.ProvideDockerRepository(fileSystemConfigRepository, secretsRepository, portsTemplater, osCommandRunner)
+	helmClient := container_orchestrator.ProvideHelmClient(osCommandRunner)
+	client := kustomize.ProvideKustomizeClient(osCommandRunner, osFileSystem)
+	chartWrapper := core.ProvideChartWrapper(osFileSystem)
+	kubernetes, err := container_orchestrator.ProvideKubernetes(fileSystemConfigRepository, secretsRepository, portsTemplater, osFileSystem, helmClient, client, chartWrapper)
 	if err != nil {
 		return handler.InstallCommandHandler{}, err
 	}
 	devProxyManager := core.ProvideDevProxyManager(fileSystemConfigRepository, osFileSystem, dockerRepository, kubernetes)
 	environmentEnsurer := core.ProvideEnvironmentEnsurer(fileSystemConfigRepository, kubernetes)
-	gitClient := scm.ProvideGitClient()
-	git := scm.ProvideGit(gitClient)
+	gitClient := scm.ProvideGitClient(osCommandRunner, osFileSystem)
+	git := scm.ProvideGit(gitClient, osFileSystem)
 	installCommandHandler := handler.ProvideInstallCommandHandler(fileSystemConfigRepository, dockerRepository, kubernetes, devProxyManager, environmentEnsurer, git)
 	return installCommandHandler, nil
 }
@@ -81,12 +88,16 @@ func InjectUninstallCommandHandler() (handler.UninstallCommandHandler, error) {
 	secretsRepository := core.ProvideEncryptedFileSecretRepository(osFileSystem, portsKeyring, aesGcmEncryptor)
 	portsTemplater := templater.ProvideTextTemplater()
 	fileSystemConfigRepository := core.ProvideFileSystemConfigRepository(osFileSystem, secretsRepository, portsTemplater)
-	kubernetes, err := container_orchestrator.ProvideKubernetes(fileSystemConfigRepository, secretsRepository, portsTemplater)
+	osCommandRunner := command_runner.ProvideOsCommandRunner()
+	helmClient := container_orchestrator.ProvideHelmClient(osCommandRunner)
+	client := kustomize.ProvideKustomizeClient(osCommandRunner, osFileSystem)
+	chartWrapper := core.ProvideChartWrapper(osFileSystem)
+	kubernetes, err := container_orchestrator.ProvideKubernetes(fileSystemConfigRepository, secretsRepository, portsTemplater, osFileSystem, helmClient, client, chartWrapper)
 	if err != nil {
 		return handler.UninstallCommandHandler{}, err
 	}
 	environmentEnsurer := core.ProvideEnvironmentEnsurer(fileSystemConfigRepository, kubernetes)
-	dockerRepository := container_image_repository.ProvideDockerRepository(fileSystemConfigRepository, secretsRepository, portsTemplater)
+	dockerRepository := container_image_repository.ProvideDockerRepository(fileSystemConfigRepository, secretsRepository, portsTemplater, osCommandRunner)
 	devProxyManager := core.ProvideDevProxyManager(fileSystemConfigRepository, osFileSystem, dockerRepository, kubernetes)
 	uninstallCommandHandler := handler.ProvideUninstallCommandHandler(fileSystemConfigRepository, kubernetes, environmentEnsurer, devProxyManager)
 	return uninstallCommandHandler, nil
@@ -99,7 +110,11 @@ func InjectGenEnvKeyCommandHandler() (handler.GenEnvKeyCommandHandler, error) {
 	secretsRepository := core.ProvideEncryptedFileSecretRepository(osFileSystem, portsKeyring, aesGcmEncryptor)
 	portsTemplater := templater.ProvideTextTemplater()
 	fileSystemConfigRepository := core.ProvideFileSystemConfigRepository(osFileSystem, secretsRepository, portsTemplater)
-	kubernetes, err := container_orchestrator.ProvideKubernetes(fileSystemConfigRepository, secretsRepository, portsTemplater)
+	osCommandRunner := command_runner.ProvideOsCommandRunner()
+	helmClient := container_orchestrator.ProvideHelmClient(osCommandRunner)
+	client := kustomize.ProvideKustomizeClient(osCommandRunner, osFileSystem)
+	chartWrapper := core.ProvideChartWrapper(osFileSystem)
+	kubernetes, err := container_orchestrator.ProvideKubernetes(fileSystemConfigRepository, secretsRepository, portsTemplater, osFileSystem, helmClient, client, chartWrapper)
 	if err != nil {
 		return handler.GenEnvKeyCommandHandler{}, err
 	}
@@ -114,9 +129,10 @@ func InjectContextCommandHandler() (handler.ContextCommandHandler, error) {
 	secretsRepository := core.ProvideEncryptedFileSecretRepository(osFileSystem, portsKeyring, aesGcmEncryptor)
 	portsTemplater := templater.ProvideTextTemplater()
 	fileSystemConfigRepository := core.ProvideFileSystemConfigRepository(osFileSystem, secretsRepository, portsTemplater)
-	gitClient := scm.ProvideGitClient()
-	git := scm.ProvideGit(gitClient)
-	dockerRepository := container_image_repository.ProvideDockerRepository(fileSystemConfigRepository, secretsRepository, portsTemplater)
+	osCommandRunner := command_runner.ProvideOsCommandRunner()
+	gitClient := scm.ProvideGitClient(osCommandRunner, osFileSystem)
+	git := scm.ProvideGit(gitClient, osFileSystem)
+	dockerRepository := container_image_repository.ProvideDockerRepository(fileSystemConfigRepository, secretsRepository, portsTemplater, osCommandRunner)
 	contextCommandHandler := handler.ProvideContextCommandHandler(fileSystemConfigRepository, git, dockerRepository)
 	return contextCommandHandler, nil
 }
@@ -150,9 +166,10 @@ func InjectRunCommandHandler() (handler.RunCommandHandler, error) {
 	secretsRepository := core.ProvideEncryptedFileSecretRepository(osFileSystem, portsKeyring, aesGcmEncryptor)
 	portsTemplater := templater.ProvideTextTemplater()
 	fileSystemConfigRepository := core.ProvideFileSystemConfigRepository(osFileSystem, secretsRepository, portsTemplater)
-	gitClient := scm.ProvideGitClient()
-	git := scm.ProvideGit(gitClient)
-	runCommandHandler := handler.ProvideRunCommandHandler(fileSystemConfigRepository, secretsRepository, portsTemplater, git)
+	osCommandRunner := command_runner.ProvideOsCommandRunner()
+	gitClient := scm.ProvideGitClient(osCommandRunner, osFileSystem)
+	git := scm.ProvideGit(gitClient, osFileSystem)
+	runCommandHandler := handler.ProvideRunCommandHandler(fileSystemConfigRepository, secretsRepository, portsTemplater, git, osCommandRunner)
 	return runCommandHandler, nil
 }
 
@@ -180,10 +197,10 @@ func InjectGenerateCommandHandler() (handler.GenerateCommandHandler, error) {
 
 // wire.go:
 
-var Adapter = wire.NewSet(scm.ProvideGitClient, scm.ProvideGit, wire.Bind(new(ports.Scm), new(*scm.Git)), container_image_repository.ProvideDockerRepository, wire.Bind(new(ports.ContainerImageRepository), new(*container_image_repository.DockerRepository)), container_orchestrator.ProvideKubernetes, wire.Bind(new(ports.ContainerOrchestrator), new(*container_orchestrator.Kubernetes)), filesystem.ProvideOsFileSystem, wire.Bind(new(ports.FileSystem), new(*filesystem.OsFileSystem)), keyring.ProvideZalandoKeyring, symmetric_encryptor.ProvideAesGcmEncryptor, wire.Bind(new(ports.SymmetricEncryptor), new(*symmetric_encryptor.AesGcmEncryptor)), templater.ProvideTextTemplater)
+var Adapter = wire.NewSet(command_runner.ProvideOsCommandRunner, wire.Bind(new(ports.CommandRunner), new(*command_runner.OsCommandRunner)), scm.ProvideGitClient, scm.ProvideGit, wire.Bind(new(ports.Scm), new(*scm.Git)), container_image_repository.ProvideDockerRepository, wire.Bind(new(ports.ContainerImageRepository), new(*container_image_repository.DockerRepository)), container_orchestrator.ProvideHelmClient, wire.Bind(new(ports.HelmClient), new(*container_orchestrator.HelmClient)), kustomize.ProvideKustomizeClient, wire.Bind(new(ports.KustomizeClient), new(*kustomize.Client)), container_orchestrator.ProvideKubernetes, wire.Bind(new(ports.ContainerOrchestrator), new(*container_orchestrator.Kubernetes)), filesystem.ProvideOsFileSystem, wire.Bind(new(ports.FileSystem), new(*filesystem.OsFileSystem)), keyring.ProvideZalandoKeyring, symmetric_encryptor.ProvideAesGcmEncryptor, wire.Bind(new(ports.SymmetricEncryptor), new(*symmetric_encryptor.AesGcmEncryptor)), templater.ProvideTextTemplater)
 
 // CoreSet provides domain/core dependencies
-var CoreSet = wire.NewSet(core.ProvideFileSystemConfigRepository, wire.Bind(new(core.ConfigRepository), new(*core.FileSystemConfigRepository)), core.ProvideDevProxyManager, core.ProvideEncryptedFileSecretRepository, core.ProvideEnvironmentEnsurer)
+var CoreSet = wire.NewSet(core.ProvideFileSystemConfigRepository, wire.Bind(new(core.ConfigRepository), new(*core.FileSystemConfigRepository)), core.ProvideDevProxyManager, core.ProvideEncryptedFileSecretRepository, core.ProvideEnvironmentEnsurer, core.ProvideChartWrapper)
 
 // CommandHandlerSet combines all sets needed for command handlers
 var CommandHandlerSet = wire.NewSet(

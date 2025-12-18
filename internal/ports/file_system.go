@@ -13,4 +13,9 @@ type FileSystem interface {
 	WriteFile(path string, content []byte, accessMode AccessMode) error
 	EnsureDirExists(path string) error
 	FileExists(path string) (bool, error)
+	MkdirAll(path string, accessMode AccessMode) error
+	RemoveAll(path string) error
+	// HomeDir returns the user's home directory path.
+	// Used when paths need to be expanded for external tools like Helm.
+	HomeDir() (string, error)
 }

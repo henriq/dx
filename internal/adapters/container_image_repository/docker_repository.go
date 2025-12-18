@@ -2,31 +2,32 @@ package container_image_repository
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"dx/internal/core"
 	"dx/internal/core/domain"
 	"dx/internal/ports"
-
-	"os/exec"
-	"path/filepath"
-	"strings"
 )
 
 type DockerRepository struct {
 	configRepository  core.ConfigRepository
 	secretsRepository core.SecretsRepository
 	templater         ports.Templater
+	commandRunner     ports.CommandRunner
 }
 
 func ProvideDockerRepository(
 	configRepository core.ConfigRepository,
 	secretsRepository core.SecretsRepository,
 	templater ports.Templater,
+	commandRunner ports.CommandRunner,
 ) *DockerRepository {
 	return &DockerRepository{
 		configRepository:  configRepository,
 		secretsRepository: secretsRepository,
 		templater:         templater,
+		commandRunner:     commandRunner,
 	}
 }
 
@@ -62,19 +63,16 @@ func (d *DockerRepository) BuildImage(image domain.DockerImage) error {
 	// Add context path as the last argument
 	args = append(args, contextPath)
 
-	output := strings.Builder{}
-
-	cmd := exec.Command("docker", args...)
-	cmd.Stdout = &output
-	cmd.Stderr = &output
-
-	// If using dockerfile override, pipe the content via stdin
+	var output []byte
 	if dockerfileContent != "" {
-		cmd.Stdin = strings.NewReader(dockerfileContent)
+		// If using dockerfile override, pipe the content via stdin
+		output, err = d.commandRunner.RunWithStdin(strings.NewReader(dockerfileContent), "docker", args...)
+	} else {
+		output, err = d.commandRunner.Run("docker", args...)
 	}
 
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to build image: %v\n%s", err, output.String())
+	if err != nil {
+		return fmt.Errorf("failed to build image: %v\n%s", err, string(output))
 	}
 
 	return nil
@@ -82,13 +80,9 @@ func (d *DockerRepository) BuildImage(image domain.DockerImage) error {
 
 // PullImage pulls a Docker image from a registry
 func (d *DockerRepository) PullImage(imageName string) error {
-	output := strings.Builder{}
-	cmd := exec.Command("docker", "pull", imageName)
-	cmd.Stdout = &output
-	cmd.Stderr = &output
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to pull image: %v\n%s", err, output.String())
+	output, err := d.commandRunner.Run("docker", "pull", imageName)
+	if err != nil {
+		return fmt.Errorf("failed to pull image: %v\n%s", err, string(output))
 	}
 
 	return nil

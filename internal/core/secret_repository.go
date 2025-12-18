@@ -1,11 +1,12 @@
 package core
 
 import (
-	"dx/internal/core/domain"
-	"dx/internal/ports"
 	"encoding/json"
 	"fmt"
-	"os"
+	"path/filepath"
+
+	"dx/internal/core/domain"
+	"dx/internal/ports"
 )
 
 type SecretsRepository interface {
@@ -32,11 +33,7 @@ type EncryptedFileSecretRepository struct {
 }
 
 func (e EncryptedFileSecretRepository) LoadSecrets(configContextName string) ([]*domain.Secret, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
-	secretsFilePath := fmt.Sprintf("%s/.dx/%s/secrets", homeDir, configContextName)
+	secretsFilePath := filepath.Join("~", ".dx", configContextName, "secrets")
 	secretFileExists, err := e.fileSystem.FileExists(secretsFilePath)
 	if err != nil {
 		return nil, err
@@ -78,11 +75,7 @@ func (e EncryptedFileSecretRepository) SaveSecrets(
 	secrets []*domain.Secret,
 	configContextName string,
 ) error {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-	secretsFilePath := fmt.Sprintf("%s/.dx/%s/secrets", homeDir, configContextName)
+	secretsFilePath := filepath.Join("~", ".dx", configContextName, "secrets")
 	keyExists, err := e.keyring.HasKey(fmt.Sprintf("%s-encryption-key", configContextName))
 	if err != nil {
 		return err

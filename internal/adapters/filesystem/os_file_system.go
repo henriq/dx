@@ -2,10 +2,14 @@ package filesystem
 
 import (
 	"dx/internal/ports"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
+
+var ErrAccessDenied = errors.New("access denied: path must be within ~/.dx/ or be ~/.dx-config.yaml")
 
 type OsFileSystem struct{}
 
@@ -13,56 +17,165 @@ func ProvideOsFileSystem() *OsFileSystem {
 	return &OsFileSystem{}
 }
 
-func (f *OsFileSystem) ReadFile(path string) ([]byte, error) {
-	if len(path) > 0 && path[:1] == "~" {
+// expandPath expands ~ to the user's home directory and returns the absolute path.
+// Works cross-platform (Unix, macOS, Windows) by normalizing path separators.
+func expandPath(path string) (string, error) {
+	if len(path) > 0 && path[0] == '~' {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return nil, fmt.Errorf("failed to get user home directory: %w", err)
+			return "", fmt.Errorf("failed to get user home directory: %w", err)
 		}
-		path = filepath.Join(home, path[1:])
+		// Get the part after ~, stripping any leading separator (/ or \)
+		rest := path[1:]
+		if len(rest) > 0 && (rest[0] == '/' || rest[0] == '\\') {
+			rest = rest[1:]
+		}
+		// Normalize path separators to the OS-native separator for cross-platform compatibility
+		rest = normalizePathSeparators(rest)
+		path = filepath.Join(home, rest)
+	}
+	return filepath.Abs(path)
+}
+
+// normalizePathSeparators converts all path separators to the OS-native separator.
+// This allows paths copied from Windows (with \) to work on Unix and vice versa.
+func normalizePathSeparators(path string) string {
+	// Replace both forward and back slashes with the OS-native separator
+	path = strings.ReplaceAll(path, "/", string(filepath.Separator))
+	path = strings.ReplaceAll(path, "\\", string(filepath.Separator))
+	return path
+}
+
+// allowedPaths returns the allowed path patterns: ~/.dx/ directory and ~/.dx-config.yaml file.
+func allowedPaths() (dxDir string, configFile string, err error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get user home directory: %w", err)
+	}
+	return filepath.Join(home, ".dx"), filepath.Join(home, ".dx-config.yaml"), nil
+}
+
+// resolveSymlinks resolves symlinks in a path, handling non-existent files by
+// resolving the existing parent directory and appending the remaining path.
+func resolveSymlinks(path string) (string, error) {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err == nil {
+		return resolved, nil
 	}
 
-	return os.ReadFile(path)
+	if !os.IsNotExist(err) {
+		return "", err
+	}
+
+	// File doesn't exist - resolve parent directory and append filename
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+
+	resolvedDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Parent also doesn't exist, keep resolving up the tree
+			resolvedDir, err = resolveSymlinks(dir)
+			if err != nil {
+				return "", err
+			}
+		} else {
+			return "", err
+		}
+	}
+
+	return filepath.Join(resolvedDir, base), nil
+}
+
+// validatePath checks that the given path is within ~/.dx/ or is ~/.dx-config.yaml.
+// It also resolves symlinks to prevent symlink escape attacks.
+func validatePath(path string) (string, error) {
+	if path == "" {
+		return "", ErrAccessDenied
+	}
+
+	absPath, err := expandPath(path)
+	if err != nil {
+		return "", err
+	}
+
+	dxDir, configFile, err := allowedPaths()
+	if err != nil {
+		return "", err
+	}
+
+	// Clean the path first
+	cleanPath := filepath.Clean(absPath)
+
+	// Resolve symlinks to prevent symlink escape attacks
+	// If resolution fails (e.g., path traverses through a file), deny access
+	resolvedPath, err := resolveSymlinks(cleanPath)
+	if err != nil {
+		return "", ErrAccessDenied
+	}
+
+	// Check if path is the config file
+	if resolvedPath == configFile {
+		return resolvedPath, nil
+	}
+
+	// Check if path is within ~/.dx/ directory
+	if resolvedPath == dxDir || strings.HasPrefix(resolvedPath, dxDir+string(filepath.Separator)) {
+		return resolvedPath, nil
+	}
+
+	return "", ErrAccessDenied
+}
+
+func (f *OsFileSystem) ReadFile(path string) ([]byte, error) {
+	validPath, err := validatePath(path)
+	if err != nil {
+		return nil, err
+	}
+
+	return os.ReadFile(validPath)
 }
 
 func (f *OsFileSystem) WriteFile(path string, content []byte, accessMode ports.AccessMode) error {
-	if len(path) > 0 && path[:1] == "~" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("failed to get user home directory: %w", err)
-		}
-		path = filepath.Join(home, path[1:])
+	validPath, err := validatePath(path)
+	if err != nil {
+		return err
 	}
 
-	err := f.EnsureDirExists(path)
+	err = f.ensureDirExistsInternal(validPath)
 	if err != nil {
 		return fmt.Errorf("failed to ensure directory exists: %w", err)
 	}
 
-	if err := os.WriteFile(path, content, getOsFileModeForAccessMode(accessMode)); err != nil {
+	if err := os.WriteFile(validPath, content, getOsFileModeForAccessMode(accessMode)); err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
 	return nil
 }
 
 func (f *OsFileSystem) EnsureDirExists(path string) error {
-	if err := os.MkdirAll(filepath.Dir(path), getOsFileModeForAccessMode(ports.ReadWriteExecute)); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
+	validPath, err := validatePath(path)
+	if err != nil {
+		return err
 	}
 
+	return f.ensureDirExistsInternal(validPath)
+}
+
+func (f *OsFileSystem) ensureDirExistsInternal(validPath string) error {
+	if err := os.MkdirAll(filepath.Dir(validPath), getOsFileModeForAccessMode(ports.ReadWriteExecute)); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
 	return nil
 }
 
 func (f *OsFileSystem) FileExists(path string) (bool, error) {
-	if len(path) > 0 && path[:1] == "~" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return false, fmt.Errorf("failed to get user home directory: %w", err)
-		}
-		path = filepath.Join(home, path[1:])
+	validPath, err := validatePath(path)
+	if err != nil {
+		return false, err
 	}
 
-	_, err := os.Stat(path)
+	_, err = os.Stat(validPath)
 	if err == nil {
 		return true, nil
 	}
@@ -70,6 +183,38 @@ func (f *OsFileSystem) FileExists(path string) (bool, error) {
 		return false, nil
 	}
 	return false, fmt.Errorf("failed to check if file exists: %w", err)
+}
+
+func (f *OsFileSystem) MkdirAll(path string, accessMode ports.AccessMode) error {
+	validPath, err := validatePath(path)
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(validPath, getOsFileModeForAccessMode(accessMode)); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+	return nil
+}
+
+func (f *OsFileSystem) RemoveAll(path string) error {
+	validPath, err := validatePath(path)
+	if err != nil {
+		return err
+	}
+
+	if err := os.RemoveAll(validPath); err != nil {
+		return fmt.Errorf("failed to remove path: %w", err)
+	}
+	return nil
+}
+
+func (f *OsFileSystem) HomeDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get user home directory: %w", err)
+	}
+	return home, nil
 }
 
 func getOsFileModeForAccessMode(accessMode ports.AccessMode) os.FileMode {

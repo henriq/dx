@@ -4,10 +4,12 @@
 package app
 
 import (
+	"dx/internal/adapters/command_runner"
 	"dx/internal/adapters/container_image_repository"
 	"dx/internal/adapters/container_orchestrator"
 	"dx/internal/adapters/filesystem"
 	"dx/internal/adapters/keyring"
+	"dx/internal/adapters/kustomize"
 	"dx/internal/adapters/scm"
 	"dx/internal/adapters/symmetric_encryptor"
 	"dx/internal/adapters/templater"
@@ -19,11 +21,17 @@ import (
 )
 
 var Adapter = wire.NewSet(
+	command_runner.ProvideOsCommandRunner,
+	wire.Bind(new(ports.CommandRunner), new(*command_runner.OsCommandRunner)),
 	scm.ProvideGitClient,
 	scm.ProvideGit,
 	wire.Bind(new(ports.Scm), new(*scm.Git)),
 	container_image_repository.ProvideDockerRepository,
 	wire.Bind(new(ports.ContainerImageRepository), new(*container_image_repository.DockerRepository)),
+	container_orchestrator.ProvideHelmClient,
+	wire.Bind(new(ports.HelmClient), new(*container_orchestrator.HelmClient)),
+	kustomize.ProvideKustomizeClient,
+	wire.Bind(new(ports.KustomizeClient), new(*kustomize.Client)),
 	container_orchestrator.ProvideKubernetes,
 	wire.Bind(new(ports.ContainerOrchestrator), new(*container_orchestrator.Kubernetes)),
 	filesystem.ProvideOsFileSystem,
@@ -41,6 +49,7 @@ var CoreSet = wire.NewSet(
 	core.ProvideDevProxyManager,
 	core.ProvideEncryptedFileSecretRepository,
 	core.ProvideEnvironmentEnsurer,
+	core.ProvideChartWrapper,
 )
 
 // CommandHandlerSet combines all sets needed for command handlers

@@ -38,6 +38,7 @@ func TestInstallCommandHandler_HandleInstallsAllServices(t *testing.T) {
 	containerOrchestrator.On("InstallDevProxy", mock.Anything).Return(nil)
 	fileSystem := new(testutil.MockFileSystem)
 	fileSystem.On("WriteFile", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	fileSystem.On("HomeDir").Return("/home/test", nil)
 	scm := new(testutil.MockScm)
 	scm.On(
 		"Download",
@@ -112,6 +113,7 @@ func TestInstallCommandHandler_HandleInstallsOnlySelectedService(t *testing.T) {
 	containerOrchestrator.On("InstallDevProxy", mock.Anything).Return(nil)
 	fileSystem := new(testutil.MockFileSystem)
 	fileSystem.On("WriteFile", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	fileSystem.On("HomeDir").Return("/home/test", nil)
 	scm := new(testutil.MockScm)
 	scm.On(
 		"Download",

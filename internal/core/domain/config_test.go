@@ -55,3 +55,56 @@ func TestCreateDefaultConfigReturnsConfig(t *testing.T) {
 	assert.Equal(t, 1, len(defaultConfig.Contexts))
 	assert.Nil(t, defaultConfig.Validate())
 }
+
+func TestConfig_Validate_ContextNamePathTraversal(t *testing.T) {
+	tests := []struct {
+		name        string
+		contextName string
+		wantErr     bool
+	}{
+		{"valid name", "my-context", false},
+		{"valid name with dashes", "my-context-123", false},
+		{"path traversal with ..", "../etc", true},
+		{"path traversal with forward slash", "foo/bar", true},
+		{"path traversal with backslash", "foo\\bar", true},
+		{"null byte injection", "foo\x00bar", true},
+		{"double dot in middle", "foo..bar", true},
+		{"empty name", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := Config{
+				Contexts: []ConfigurationContext{
+					{
+						Name: tt.contextName,
+						Services: []Service{
+							{
+								Name:                  "test-svc",
+								HelmRepoPath:          "/tmp/helm",
+								HelmBranch:            "main",
+								HelmChartRelativePath: "charts",
+								DockerImages: []DockerImage{
+									{
+										Name:                     "test-img",
+										DockerfilePath:           "Dockerfile",
+										BuildContextRelativePath: ".",
+										GitRepoPath:              "/tmp/repo",
+										GitRef:                   "main",
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err := config.Validate()
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

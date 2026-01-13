@@ -5,9 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"text/template"
 
@@ -17,7 +15,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-//go:embed templates/*.tpl
 //go:embed templates/dev-proxy/*/*.tpl
 var templateFiles embed.FS
 
@@ -89,34 +86,6 @@ func (d *DevProxyManager) SaveConfiguration() error {
 		return err
 	}
 
-	helmPostRenderer, err := renderTemplate("templates/helm-post-renderer.sh.tpl", values)
-	if err != nil {
-		return err
-	}
-	err = d.fileService.WriteFile(
-		filepath.Join("~", ".dx", configContext.Name, "helm-post-renderer.sh"),
-		helmPostRenderer,
-		ports.ReadWriteExecute,
-	)
-	if err != nil {
-		return err
-	}
-
-	if runtime.GOOS == "windows" {
-		helmPostRenderer, err := renderTemplate("templates/helm-post-renderer.bat.tpl", values)
-		if err != nil {
-			return err
-		}
-		err = d.fileService.WriteFile(
-			filepath.Join("~", ".dx", configContext.Name, "helm-post-renderer.bat"),
-			helmPostRenderer,
-			ports.ReadWriteExecute,
-		)
-		if err != nil {
-			return err
-		}
-	}
-
 	haProxyDockerFile, err := renderTemplate(
 		"templates/dev-proxy/haproxy/Dockerfile.tpl",
 		values,
@@ -186,7 +155,7 @@ func (d *DevProxyManager) BuildDevProxy() error {
 	if err != nil {
 		return err
 	}
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := d.fileService.HomeDir()
 	if err != nil {
 		return err
 	}
@@ -220,7 +189,7 @@ func (d *DevProxyManager) InstallDevProxy() error {
 	if err != nil {
 		return err
 	}
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := d.fileService.HomeDir()
 	if err != nil {
 		return err
 	}
@@ -237,7 +206,7 @@ func (d *DevProxyManager) UninstallDevProxy() error {
 	if err != nil {
 		return err
 	}
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := d.fileService.HomeDir()
 	if err != nil {
 		return err
 	}

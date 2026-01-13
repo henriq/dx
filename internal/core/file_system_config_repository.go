@@ -138,13 +138,17 @@ func (c *FileSystemConfigRepository) LoadConfig() (*domain.Config, error) {
 	for i, _ := range config.Contexts {
 		context := &config.Contexts[i]
 		if context.Import != nil {
-			data, err := c.fileService.ReadFile(*context.Import)
+			// Import paths are user-specified and may point to any location on the filesystem.
+			// This is intentional - users may want to import shared config from project directories.
+			// We use os.ReadFile directly since the restricted FileSystem is only for ~/.dx/ paths.
+			importPath := expandImportPath(*context.Import, home)
+			data, err := os.ReadFile(importPath)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "WARN: %v\n", err)
+				fmt.Fprintf(os.Stderr, "WARN: failed to read import file %s: %v\n", importPath, err)
 			} else {
 				var baseContextConfig domain.ConfigurationContext
 				if err := yaml.Unmarshal(data, &baseContextConfig); err != nil {
-					fmt.Fprintf(os.Stderr, "WARN: failed to parse configuration file %s: %v\n", *context.Import, err)
+					fmt.Fprintf(os.Stderr, "WARN: failed to parse configuration file %s: %v\n", importPath, err)
 				} else {
 					config.Contexts[i] = mergeConfigurationContexts(baseContextConfig, *context)
 				}
@@ -232,11 +236,44 @@ func (c *FileSystemConfigRepository) LoadCurrentContextName() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to read current context file: %v", err)
 	}
-	return string(data), nil
+	contextName := strings.TrimSpace(string(data))
+	if err := validateContextName(contextName); err != nil {
+		return "", fmt.Errorf("invalid context name in current-context file: %w", err)
+	}
+	return contextName, nil
 }
 
 func (c *FileSystemConfigRepository) SaveCurrentContextName(currentContextName string) error {
+	if err := validateContextName(currentContextName); err != nil {
+		return fmt.Errorf("invalid context name: %w", err)
+	}
 	return c.fileService.WriteFile(currentContextPath, []byte(currentContextName), ports.ReadWrite)
+}
+
+// expandImportPath expands ~ to home directory for import paths.
+// Import paths can be anywhere on the filesystem, so this is separate from the restricted FileSystem.
+func expandImportPath(path string, home string) string {
+	if strings.HasPrefix(path, "~/") {
+		return filepath.Join(home, path[2:])
+	}
+	if path == "~" {
+		return home
+	}
+	return path
+}
+
+// validateContextName checks that a context name doesn't contain path traversal characters.
+func validateContextName(name string) error {
+	if name == "" {
+		return fmt.Errorf("context name cannot be empty")
+	}
+	if strings.Contains(name, "..") ||
+		strings.Contains(name, "/") ||
+		strings.Contains(name, "\\") ||
+		strings.Contains(name, "\x00") {
+		return fmt.Errorf("context name contains invalid characters")
+	}
+	return nil
 }
 
 func (c *FileSystemConfigRepository) LoadCurrentConfigurationContext() (*domain.ConfigurationContext, error) {

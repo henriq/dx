@@ -2,19 +2,22 @@ package scm
 
 import (
 	"fmt"
-	"os"
+
+	"dx/internal/ports"
 )
 
 type Git struct {
-	gitClient *GitClient
+	gitClient  *GitClient
+	fileSystem ports.FileSystem
 	// Track unique repo+branch combinations to avoid duplicate clones
 	cloned map[string]bool
 }
 
-func ProvideGit(gitClient *GitClient) *Git {
+func ProvideGit(gitClient *GitClient, fileSystem ports.FileSystem) *Git {
 	return &Git{
-		gitClient: gitClient,
-		cloned:    make(map[string]bool),
+		gitClient:  gitClient,
+		fileSystem: fileSystem,
+		cloned:     make(map[string]bool),
 	}
 }
 
@@ -67,7 +70,7 @@ func (g *Git) Download(repositoryUrl string, ref string, repositoryPath string) 
 			}
 		} else {
 			// Create the destination directory if it doesn't exist
-			if err := os.MkdirAll(repositoryPath, os.ModePerm); err != nil {
+			if err := g.fileSystem.MkdirAll(repositoryPath, ports.ReadWriteExecute); err != nil {
 				return fmt.Errorf("failed to create destination directory: %v", err)
 			}
 			err := g.gitClient.Download(repositoryPath, ref, repositoryUrl)

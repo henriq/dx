@@ -73,7 +73,8 @@ func InjectInstallCommandHandler() (handler.InstallCommandHandler, error) {
 	if err != nil {
 		return handler.InstallCommandHandler{}, err
 	}
-	devProxyManager := core.ProvideDevProxyManager(fileSystemConfigRepository, osFileSystem, dockerRepository, kubernetes)
+	devProxyConfigGenerator := core.ProvideDevProxyConfigGenerator()
+	devProxyManager := core.ProvideDevProxyManager(fileSystemConfigRepository, osFileSystem, dockerRepository, kubernetes, devProxyConfigGenerator)
 	environmentEnsurer := core.ProvideEnvironmentEnsurer(fileSystemConfigRepository, kubernetes)
 	gitClient := scm.ProvideGitClient(osCommandRunner, osFileSystem)
 	git := scm.ProvideGit(gitClient, osFileSystem)
@@ -98,7 +99,8 @@ func InjectUninstallCommandHandler() (handler.UninstallCommandHandler, error) {
 	}
 	environmentEnsurer := core.ProvideEnvironmentEnsurer(fileSystemConfigRepository, kubernetes)
 	dockerRepository := container_image_repository.ProvideDockerRepository(fileSystemConfigRepository, secretsRepository, portsTemplater, osCommandRunner)
-	devProxyManager := core.ProvideDevProxyManager(fileSystemConfigRepository, osFileSystem, dockerRepository, kubernetes)
+	devProxyConfigGenerator := core.ProvideDevProxyConfigGenerator()
+	devProxyManager := core.ProvideDevProxyManager(fileSystemConfigRepository, osFileSystem, dockerRepository, kubernetes, devProxyConfigGenerator)
 	uninstallCommandHandler := handler.ProvideUninstallCommandHandler(fileSystemConfigRepository, kubernetes, environmentEnsurer, devProxyManager)
 	return uninstallCommandHandler, nil
 }
@@ -200,7 +202,7 @@ func InjectGenerateCommandHandler() (handler.GenerateCommandHandler, error) {
 var Adapter = wire.NewSet(command_runner.ProvideOsCommandRunner, wire.Bind(new(ports.CommandRunner), new(*command_runner.OsCommandRunner)), scm.ProvideGitClient, scm.ProvideGit, wire.Bind(new(ports.Scm), new(*scm.Git)), container_image_repository.ProvideDockerRepository, wire.Bind(new(ports.ContainerImageRepository), new(*container_image_repository.DockerRepository)), container_orchestrator.ProvideHelmClient, wire.Bind(new(ports.HelmClient), new(*container_orchestrator.HelmClient)), kustomize.ProvideKustomizeClient, wire.Bind(new(ports.KustomizeClient), new(*kustomize.Client)), container_orchestrator.ProvideKubernetes, wire.Bind(new(ports.ContainerOrchestrator), new(*container_orchestrator.Kubernetes)), filesystem.ProvideOsFileSystem, wire.Bind(new(ports.FileSystem), new(*filesystem.OsFileSystem)), keyring.ProvideZalandoKeyring, symmetric_encryptor.ProvideAesGcmEncryptor, wire.Bind(new(ports.SymmetricEncryptor), new(*symmetric_encryptor.AesGcmEncryptor)), templater.ProvideTextTemplater)
 
 // CoreSet provides domain/core dependencies
-var CoreSet = wire.NewSet(core.ProvideFileSystemConfigRepository, wire.Bind(new(core.ConfigRepository), new(*core.FileSystemConfigRepository)), core.ProvideDevProxyManager, core.ProvideEncryptedFileSecretRepository, core.ProvideEnvironmentEnsurer, core.ProvideChartWrapper)
+var CoreSet = wire.NewSet(core.ProvideFileSystemConfigRepository, wire.Bind(new(core.ConfigRepository), new(*core.FileSystemConfigRepository)), core.ProvideDevProxyConfigGenerator, core.ProvideDevProxyManager, core.ProvideEncryptedFileSecretRepository, core.ProvideEnvironmentEnsurer, core.ProvideChartWrapper)
 
 // CommandHandlerSet combines all sets needed for command handlers
 var CommandHandlerSet = wire.NewSet(

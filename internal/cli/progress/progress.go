@@ -45,7 +45,7 @@ type Tracker struct {
 	actionVerb   string // e.g., "Building", "Installing", "Pulling"
 }
 
-var spinnerFrames = []string{"·", "✦", "✶", "✸", "✹", "❋", "✹", "✸", "✶", "✦"}
+var spinnerFrames = []string{"✦", "✶", "✸", "✹", "❋", "✹", "✸", "✶"}
 
 // NewTracker creates a new progress tracker with names only
 func NewTracker(names []string) *Tracker {

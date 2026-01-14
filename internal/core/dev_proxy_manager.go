@@ -1,146 +1,99 @@
 package core
 
 import (
-	"crypto/sha256"
-	"embed"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"strings"
-	"text/template"
 
 	"dx/internal/core/domain"
 	"dx/internal/ports"
-
-	"gopkg.in/yaml.v3"
 )
 
-//go:embed templates/dev-proxy/*/*.tpl
-var templateFiles embed.FS
-
+// DevProxyManager orchestrates dev-proxy operations including configuration saving,
+// image building, and service installation/uninstallation.
 type DevProxyManager struct {
 	configRepository         ConfigRepository
 	fileService              ports.FileSystem
 	containerImageRepository ports.ContainerImageRepository
 	containerOrchestrator    ports.ContainerOrchestrator
+	configGenerator          *DevProxyConfigGenerator
 }
 
+// ProvideDevProxyManager creates a new DevProxyManager with all required dependencies.
 func ProvideDevProxyManager(
 	configRepository ConfigRepository,
 	fileService ports.FileSystem,
 	containerImageRepository ports.ContainerImageRepository,
 	containerOrchestrator ports.ContainerOrchestrator,
+	configGenerator *DevProxyConfigGenerator,
 ) *DevProxyManager {
 	return &DevProxyManager{
 		configRepository:         configRepository,
 		fileService:              fileService,
 		containerImageRepository: containerImageRepository,
 		containerOrchestrator:    containerOrchestrator,
+		configGenerator:          configGenerator,
 	}
 }
 
-// SaveConfiguration saves the given configuration to the HAProxy configuration file to $HOME/.dx/$CONTEXT_NAME/haproxy/haproxy.cfg
+// SaveConfiguration generates and saves all dev-proxy configuration files
+// to $HOME/.dx/$CONTEXT_NAME/dev-proxy/
 func (d *DevProxyManager) SaveConfiguration() error {
 	configContext, err := d.configRepository.LoadCurrentConfigurationContext()
 	if err != nil {
 		return err
 	}
-	frontendPort := 8080
-	proxyPort := 18080
-	services := make([]map[string]interface{}, len(configContext.LocalServices))
-	for i, localService := range configContext.LocalServices {
-		services[i] = map[string]interface{}{
-			"Name":            localService.Name,
-			"FrontendPort":    frontendPort,
-			"ProxyPort":       proxyPort,
-			"KubernetesPort":  localService.KubernetesPort,
-			"LocalPort":       localService.LocalPort,
-			"HealthCheckPath": localService.HealthCheckPath,
-			"Selector":        localService.Selector,
-		}
-		frontendPort++
-		proxyPort++
-	}
 
-	hash := sha256.New()
-	serviceJSON, _ := json.Marshal(configContext.LocalServices)
-	hash.Write(serviceJSON)
-	checksum := fmt.Sprintf("%x", hash.Sum(nil))[:62]
-
-	values := map[string]interface{}{
-		"Services": services,
-		"Name":     configContext.Name,
-		"Checksum": checksum,
-	}
-
-	haproxyConfig, err := renderTemplate("templates/dev-proxy/haproxy/haproxy.cfg.tpl", values)
+	configs, err := d.configGenerator.Generate(configContext)
 	if err != nil {
 		return err
 	}
+
+	basePath := filepath.Join("~", ".dx", configContext.Name, "dev-proxy")
+
+	// Write HAProxy config
 	err = d.fileService.WriteFile(
-		filepath.Join("~", ".dx", configContext.Name, "dev-proxy", "haproxy", "haproxy.cfg"),
-		haproxyConfig,
+		filepath.Join(basePath, "haproxy", "haproxy.cfg"),
+		configs.HAProxyConfig,
 		ports.ReadAllWriteOwner,
 	)
 	if err != nil {
 		return err
 	}
 
-	haProxyDockerFile, err := renderTemplate(
-		"templates/dev-proxy/haproxy/Dockerfile.tpl",
-		values,
-	)
-	if err != nil {
-		return err
-	}
+	// Write HAProxy Dockerfile
 	err = d.fileService.WriteFile(
-		filepath.Join("~", ".dx", configContext.Name, "dev-proxy", "haproxy", "Dockerfile"),
-		haProxyDockerFile,
+		filepath.Join(basePath, "haproxy", "Dockerfile"),
+		configs.HAProxyDockerfile,
 		ports.ReadWrite,
 	)
 	if err != nil {
 		return err
 	}
 
-	mitmProxyDockerFile, err := renderTemplate(
-		"templates/dev-proxy/mitmproxy/Dockerfile.tpl",
-		values,
-	)
-	if err != nil {
-		return err
-	}
+	// Write mitmproxy Dockerfile
 	err = d.fileService.WriteFile(
-		filepath.Join("~", ".dx", configContext.Name, "dev-proxy", "mitmproxy", "Dockerfile"),
-		mitmProxyDockerFile,
+		filepath.Join(basePath, "mitmproxy", "Dockerfile"),
+		configs.MitmProxyDockerfile,
 		ports.ReadWrite,
 	)
 	if err != nil {
 		return err
 	}
 
-	helmManifest, err := renderTemplate("templates/dev-proxy/helm/Chart.yaml.tpl", values)
-	if err != nil {
-		return err
-	}
+	// Write Helm Chart.yaml
 	err = d.fileService.WriteFile(
-		filepath.Join("~", ".dx", configContext.Name, "dev-proxy", "helm", "Chart.yaml"),
-		helmManifest,
+		filepath.Join(basePath, "helm", "Chart.yaml"),
+		configs.HelmChartYaml,
 		ports.ReadWrite,
 	)
 	if err != nil {
 		return err
 	}
 
-	devProxyManifests, err := renderTemplate(
-		"templates/dev-proxy/helm/deployment.yaml.tpl",
-		values,
-	)
-	if err != nil {
-		return err
-	}
+	// Write Helm deployment manifest
 	err = d.fileService.WriteFile(
-		filepath.Join("~", ".dx", configContext.Name, "dev-proxy", "helm", "templates", "dev-proxy.yaml"),
-		devProxyManifests,
+		filepath.Join(basePath, "helm", "templates", "dev-proxy.yaml"),
+		configs.HelmDeploymentYaml,
 		ports.ReadWrite,
 	)
 	if err != nil {
@@ -150,6 +103,7 @@ func (d *DevProxyManager) SaveConfiguration() error {
 	return nil
 }
 
+// BuildDevProxy builds the HAProxy and mitmproxy Docker images for the dev-proxy.
 func (d *DevProxyManager) BuildDevProxy() error {
 	configContext, err := d.configRepository.LoadCurrentConfigurationContext()
 	if err != nil {
@@ -184,6 +138,7 @@ func (d *DevProxyManager) BuildDevProxy() error {
 	return nil
 }
 
+// InstallDevProxy installs the dev-proxy service to Kubernetes using Helm.
 func (d *DevProxyManager) InstallDevProxy() error {
 	configContext, err := d.configRepository.LoadCurrentConfigurationContext()
 	if err != nil {
@@ -201,6 +156,7 @@ func (d *DevProxyManager) InstallDevProxy() error {
 	return d.containerOrchestrator.InstallDevProxy(&service)
 }
 
+// UninstallDevProxy removes the dev-proxy service from Kubernetes.
 func (d *DevProxyManager) UninstallDevProxy() error {
 	configContext, err := d.configRepository.LoadCurrentConfigurationContext()
 	if err != nil {
@@ -216,42 +172,4 @@ func (d *DevProxyManager) UninstallDevProxy() error {
 		HelmPath: filepath.Join(homeDir, ".dx", configContext.Name, "dev-proxy", "helm"),
 	}
 	return d.containerOrchestrator.UninstallService(&service)
-}
-
-var templateFunctions = template.FuncMap{
-	"toYaml": func(v interface{}) string {
-		var buf strings.Builder
-		encoder := yaml.NewEncoder(&buf)
-		encoder.SetIndent(2)
-		if err := encoder.Encode(v); err != nil {
-			return ""
-		}
-		return buf.String()
-	},
-	"indent": func(indent int, s string) string {
-		lines := strings.Split(s, "\n")
-		for i, line := range lines {
-			lines[i] = strings.Repeat(" ", indent) + line
-		}
-		return strings.Join(lines, "\n")
-	},
-}
-
-func renderTemplate(templatePath string, values map[string]interface{}) ([]byte, error) {
-	templateFile, err := templateFiles.ReadFile(templatePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read template file: %w", err)
-	}
-
-	tmpl, err := template.New(templatePath).Funcs(templateFunctions).Parse(string(templateFile))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse template: %w", err)
-	}
-
-	var result strings.Builder
-	if err := tmpl.Execute(&result, values); err != nil {
-		return nil, fmt.Errorf("failed to execute template: %w", err)
-	}
-
-	return []byte(result.String()), nil
 }

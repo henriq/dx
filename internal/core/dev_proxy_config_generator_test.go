@@ -1,0 +1,244 @@
+package core
+
+import (
+	"strings"
+	"testing"
+
+	"dx/internal/core/domain"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestDevProxyConfigGenerator_Generate_Success(t *testing.T) {
+	configContext := &domain.ConfigurationContext{
+		Name: "test-context",
+		LocalServices: []domain.LocalService{
+			{
+				Name:            "service-1",
+				KubernetesPort:  8080,
+				LocalPort:       3000,
+				HealthCheckPath: "/health",
+				Selector:        map[string]string{"app": "service-1"},
+			},
+		},
+	}
+
+	sut := ProvideDevProxyConfigGenerator()
+
+	configs, err := sut.Generate(configContext)
+
+	require.NoError(t, err)
+	assert.NotNil(t, configs)
+	assert.NotEmpty(t, configs.HAProxyConfig)
+	assert.NotEmpty(t, configs.HAProxyDockerfile)
+	assert.NotEmpty(t, configs.MitmProxyDockerfile)
+	assert.NotEmpty(t, configs.HelmChartYaml)
+	assert.NotEmpty(t, configs.HelmDeploymentYaml)
+}
+
+func TestDevProxyConfigGenerator_Generate_HAProxyConfigContent(t *testing.T) {
+	configContext := &domain.ConfigurationContext{
+		Name: "test-context",
+		LocalServices: []domain.LocalService{
+			{
+				Name:            "my-service",
+				KubernetesPort:  9090,
+				LocalPort:       4000,
+				HealthCheckPath: "/healthz",
+				Selector:        map[string]string{"app": "my-service"},
+			},
+		},
+	}
+
+	sut := ProvideDevProxyConfigGenerator()
+
+	configs, err := sut.Generate(configContext)
+
+	require.NoError(t, err)
+	haproxyConfig := string(configs.HAProxyConfig)
+
+	// Verify HAProxy config contains expected service configuration
+	assert.Contains(t, haproxyConfig, "my-service", "HAProxy config should contain service name")
+	assert.Contains(t, haproxyConfig, "8080", "HAProxy config should contain frontend port")
+}
+
+func TestDevProxyConfigGenerator_Generate_PortIncrement(t *testing.T) {
+	configContext := &domain.ConfigurationContext{
+		Name: "test-context",
+		LocalServices: []domain.LocalService{
+			{
+				Name:            "service-1",
+				KubernetesPort:  8080,
+				LocalPort:       3000,
+				HealthCheckPath: "/health",
+				Selector:        map[string]string{"app": "service-1"},
+			},
+			{
+				Name:            "service-2",
+				KubernetesPort:  8081,
+				LocalPort:       3001,
+				HealthCheckPath: "/health",
+				Selector:        map[string]string{"app": "service-2"},
+			},
+		},
+	}
+
+	sut := ProvideDevProxyConfigGenerator()
+
+	configs, err := sut.Generate(configContext)
+
+	require.NoError(t, err)
+	haproxyConfig := string(configs.HAProxyConfig)
+
+	// Verify both services are present with incremented ports
+	assert.Contains(t, haproxyConfig, "service-1")
+	assert.Contains(t, haproxyConfig, "service-2")
+	// First service gets port 8080, second gets 8081
+	assert.Contains(t, haproxyConfig, "8080")
+	assert.Contains(t, haproxyConfig, "8081")
+}
+
+func TestDevProxyConfigGenerator_Generate_ChecksumDeterministic(t *testing.T) {
+	configContext := &domain.ConfigurationContext{
+		Name: "test-context",
+		LocalServices: []domain.LocalService{
+			{
+				Name:            "service-1",
+				KubernetesPort:  8080,
+				LocalPort:       3000,
+				HealthCheckPath: "/health",
+				Selector:        map[string]string{"app": "service-1"},
+			},
+		},
+	}
+
+	sut := ProvideDevProxyConfigGenerator()
+
+	configs1, err := sut.Generate(configContext)
+	require.NoError(t, err)
+
+	configs2, err := sut.Generate(configContext)
+	require.NoError(t, err)
+
+	// Same input should produce same output (deterministic checksum)
+	assert.Equal(t, configs1.HelmDeploymentYaml, configs2.HelmDeploymentYaml)
+}
+
+func TestDevProxyConfigGenerator_Generate_HelmChartYamlContent(t *testing.T) {
+	configContext := &domain.ConfigurationContext{
+		Name: "my-context",
+		LocalServices: []domain.LocalService{
+			{
+				Name:            "service-1",
+				KubernetesPort:  8080,
+				LocalPort:       3000,
+				HealthCheckPath: "/health",
+				Selector:        map[string]string{"app": "service-1"},
+			},
+		},
+	}
+
+	sut := ProvideDevProxyConfigGenerator()
+
+	configs, err := sut.Generate(configContext)
+
+	require.NoError(t, err)
+	chartYaml := string(configs.HelmChartYaml)
+
+	// Verify Chart.yaml contains expected fields
+	assert.Contains(t, chartYaml, "name:")
+	assert.Contains(t, chartYaml, "version:")
+}
+
+func TestDevProxyConfigGenerator_Generate_EmptyLocalServices(t *testing.T) {
+	configContext := &domain.ConfigurationContext{
+		Name:          "test-context",
+		LocalServices: []domain.LocalService{},
+	}
+
+	sut := ProvideDevProxyConfigGenerator()
+
+	configs, err := sut.Generate(configContext)
+
+	require.NoError(t, err)
+	assert.NotNil(t, configs)
+	// Should still generate valid configs even with no services
+	assert.NotEmpty(t, configs.HAProxyConfig)
+	assert.NotEmpty(t, configs.HelmChartYaml)
+}
+
+func TestDevProxyConfigGenerator_Generate_SpecialCharactersInServiceName(t *testing.T) {
+	configContext := &domain.ConfigurationContext{
+		Name: "test-context",
+		LocalServices: []domain.LocalService{
+			{
+				Name:            "service-with-dashes",
+				KubernetesPort:  8080,
+				LocalPort:       3000,
+				HealthCheckPath: "/health",
+				Selector:        map[string]string{"app": "service-with-dashes"},
+			},
+		},
+	}
+
+	sut := ProvideDevProxyConfigGenerator()
+
+	configs, err := sut.Generate(configContext)
+
+	require.NoError(t, err)
+	haproxyConfig := string(configs.HAProxyConfig)
+	assert.Contains(t, haproxyConfig, "service-with-dashes")
+}
+
+func TestDevProxyConfigGenerator_buildTemplateValues_PortAssignment(t *testing.T) {
+	configContext := &domain.ConfigurationContext{
+		Name: "test-context",
+		LocalServices: []domain.LocalService{
+			{Name: "svc1", KubernetesPort: 80, LocalPort: 3000, HealthCheckPath: "/", Selector: map[string]string{"app": "svc1"}},
+			{Name: "svc2", KubernetesPort: 81, LocalPort: 3001, HealthCheckPath: "/", Selector: map[string]string{"app": "svc2"}},
+			{Name: "svc3", KubernetesPort: 82, LocalPort: 3002, HealthCheckPath: "/", Selector: map[string]string{"app": "svc3"}},
+		},
+	}
+
+	sut := ProvideDevProxyConfigGenerator()
+	values := sut.buildTemplateValues(configContext)
+
+	services := values["Services"].([]map[string]interface{})
+	assert.Len(t, services, 3)
+
+	// Verify port increments
+	assert.Equal(t, devProxyFrontendStartPort, services[0]["FrontendPort"])
+	assert.Equal(t, devProxyProxyStartPort, services[0]["ProxyPort"])
+
+	assert.Equal(t, devProxyFrontendStartPort+1, services[1]["FrontendPort"])
+	assert.Equal(t, devProxyProxyStartPort+1, services[1]["ProxyPort"])
+
+	assert.Equal(t, devProxyFrontendStartPort+2, services[2]["FrontendPort"])
+	assert.Equal(t, devProxyProxyStartPort+2, services[2]["ProxyPort"])
+}
+
+func TestDevProxyConfigGenerator_buildTemplateValues_Checksum(t *testing.T) {
+	configContext := &domain.ConfigurationContext{
+		Name: "test-context",
+		LocalServices: []domain.LocalService{
+			{Name: "svc1", KubernetesPort: 80, LocalPort: 3000, HealthCheckPath: "/", Selector: map[string]string{"app": "svc1"}},
+		},
+	}
+
+	sut := ProvideDevProxyConfigGenerator()
+	values := sut.buildTemplateValues(configContext)
+
+	checksum := values["Checksum"].(string)
+	assert.Len(t, checksum, 62, "Checksum should be 62 characters (truncated SHA256 hex)")
+	assert.True(t, isHexString(checksum), "Checksum should be a valid hex string")
+}
+
+func isHexString(s string) bool {
+	for _, c := range s {
+		if !strings.ContainsRune("0123456789abcdef", c) {
+			return false
+		}
+	}
+	return true
+}

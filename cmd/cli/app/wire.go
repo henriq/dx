@@ -46,6 +46,7 @@ var Adapter = wire.NewSet(
 var CoreSet = wire.NewSet(
 	core.ProvideFileSystemConfigRepository,
 	wire.Bind(new(core.ConfigRepository), new(*core.FileSystemConfigRepository)),
+	core.ProvideDevProxyConfigGenerator,
 	core.ProvideDevProxyManager,
 	core.ProvideEncryptedFileSecretRepository,
 	core.ProvideEnvironmentEnsurer,

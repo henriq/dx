@@ -18,6 +18,9 @@ type MockFileSystem struct {
 
 func (m *MockFileSystem) ReadFile(path string) ([]byte, error) {
 	args := m.Called(path)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).([]byte), args.Error(1)
 }
 

@@ -54,11 +54,13 @@ func TestInstallCommandHandler_HandleInstallsAllServices(t *testing.T) {
 	).Return(nil)
 	containerImageRepository := new(testutil.MockContainerImageRepository)
 	containerImageRepository.On("BuildImage", mock.Anything).Return(nil)
+	configGenerator := core.ProvideDevProxyConfigGenerator()
 	devProxyManager := core.ProvideDevProxyManager(
 		configRepository,
 		fileSystem,
 		containerImageRepository,
 		containerOrchestrator,
+		configGenerator,
 	)
 	environmentEnsurer := core.ProvideEnvironmentEnsurer(
 		configRepository,
@@ -123,11 +125,13 @@ func TestInstallCommandHandler_HandleInstallsOnlySelectedService(t *testing.T) {
 	).Return(nil)
 	containerImageRepository := new(testutil.MockContainerImageRepository)
 	containerImageRepository.On("BuildImage", mock.Anything).Return(nil)
+	configGenerator := core.ProvideDevProxyConfigGenerator()
 	devProxyManager := core.ProvideDevProxyManager(
 		configRepository,
 		fileSystem,
 		containerImageRepository,
 		containerOrchestrator,
+		configGenerator,
 	)
 	environmentEnsurer := core.ProvideEnvironmentEnsurer(
 		configRepository,

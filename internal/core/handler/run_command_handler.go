@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"dx/internal/cli/output"
@@ -80,7 +81,8 @@ func (h *RunCommandHandler) Handle(scripts map[string]string, executionPlan []st
 		output.PrintStep(fmt.Sprintf("Running %s", output.Bold(scriptName)))
 		fmt.Println()
 
-		if err := h.commandRunner.RunInteractive("bash", "-c", renderedScript); err != nil {
+		shell, shellArg := getShellCommand()
+		if err := h.commandRunner.RunInteractive(shell, shellArg, renderedScript); err != nil {
 			fmt.Println()
 			return fmt.Errorf("script '%s' failed: %v", scriptName, err)
 		}
@@ -115,4 +117,12 @@ func findService(serviceName string, existingServices []domain.Service) (domain.
 		}
 	}
 	return domain.Service{}, fmt.Errorf("service '%s' not found", serviceName)
+}
+
+// getShellCommand returns the appropriate shell and argument for the current OS.
+func getShellCommand() (shell string, shellArg string) {
+	if runtime.GOOS == "windows" {
+		return "cmd", "/c"
+	}
+	return "bash", "-c"
 }

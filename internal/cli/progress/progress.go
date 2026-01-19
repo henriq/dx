@@ -39,13 +39,14 @@ type Tracker struct {
 	startTime    time.Time
 	isTTY        bool
 	useColor     bool
+	caps         terminalCapabilities
 	stopChan     chan struct{}
 	stopOnce     sync.Once
 	spinnerFrame int
 	actionVerb   string // e.g., "Building", "Installing", "Pulling"
 }
 
-var spinnerFrames = []string{"✦", "✶", "✸", "✹", "❋", "✹", "✸", "✶"}
+var spinnerFrames = []string{"✦", "✸", "✹", "❋", "✹", "✸"}
 
 // NewTracker creates a new progress tracker with names only
 func NewTracker(names []string) *Tracker {
@@ -61,13 +62,15 @@ func NewTrackerWithVerb(names []string, verb string) *Tracker {
 
 	_, noColor := os.LookupEnv("NO_COLOR")
 	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
+	caps := detectCapabilities()
 
 	return &Tracker{
 		items:      items,
 		current:    -1,
 		total:      len(names),
 		isTTY:      isTTY,
-		useColor:   !noColor && isTTY,
+		useColor:   !noColor && isTTY && caps.supportsANSI,
+		caps:       caps,
 		stopChan:   make(chan struct{}),
 		actionVerb: verb,
 	}
@@ -91,13 +94,15 @@ func NewTrackerWithInfoAndVerb(names []string, infos []string, verb string) *Tra
 
 	_, noColor := os.LookupEnv("NO_COLOR")
 	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
+	caps := detectCapabilities()
 
 	return &Tracker{
 		items:      items,
 		current:    -1,
 		total:      len(names),
 		isTTY:      isTTY,
-		useColor:   !noColor && isTTY,
+		useColor:   !noColor && isTTY && caps.supportsANSI,
+		caps:       caps,
 		stopChan:   make(chan struct{}),
 		actionVerb: verb,
 	}
@@ -156,7 +161,14 @@ func (t *Tracker) CompleteItem(index int, err error) {
 			sym = "x"
 			status = "FAILED"
 		}
-		fmt.Printf("[%s] %s %s %s (%s)\n", ts, sym, t.items[index].Name, status, formatDuration(t.items[index].Duration))
+		fmt.Printf(
+			"[%s] %s %s %s (%s)\n",
+			ts,
+			sym,
+			t.items[index].Name,
+			status,
+			formatDuration(t.items[index].Duration),
+		)
 
 		// Print error details if present
 		if err != nil {
@@ -167,9 +179,11 @@ func (t *Tracker) CompleteItem(index int, err error) {
 
 // Stop ends the progress tracking
 func (t *Tracker) Stop() {
-	t.stopOnce.Do(func() {
-		close(t.stopChan)
-	})
+	t.stopOnce.Do(
+		func() {
+			close(t.stopChan)
+		},
+	)
 
 	// Wait for animate goroutine to finish
 	t.wg.Wait()
@@ -202,14 +216,33 @@ func (t *Tracker) GetStatus() string {
 	spinner := spinnerFrames[t.spinnerFrame%len(spinnerFrames)]
 	counter := fmt.Sprintf("[%d/%d]", t.current+1, t.total)
 
+	var line string
 	if t.useColor {
 		if item.Info != "" {
-			return fmt.Sprintf("\033[2K\r  \033[1m%s %s  %s\033[0m  \033[2m(%s)  %s\033[0m", spinner, counter, item.Name, item.Info, formatDuration(elapsed))
+			line = fmt.Sprintf(
+				"  \033[1m%s %s  %s\033[0m  \033[2m(%s)  %s\033[0m",
+				spinner,
+				counter,
+				item.Name,
+				item.Info,
+				formatDuration(elapsed),
+			)
+		} else {
+			line = fmt.Sprintf(
+				"  \033[1m%s %s  %s\033[0m  \033[2m%s\033[0m",
+				spinner,
+				counter,
+				item.Name,
+				formatDuration(elapsed),
+			)
 		}
-		return fmt.Sprintf("\033[2K\r  \033[1m%s %s  %s\033[0m  \033[2m%s\033[0m", spinner, counter, item.Name, formatDuration(elapsed))
+	} else {
+		displayName := t.formatDisplayName(item)
+		line = fmt.Sprintf("  %s %s  %s  %s", spinner, counter, displayName, formatDuration(elapsed))
 	}
-	displayName := t.formatDisplayName(item)
-	return fmt.Sprintf("\r  %s %s  %s  %s", spinner, counter, displayName, formatDuration(elapsed))
+
+	// Truncate to terminal width to prevent line wrapping
+	return clearLine(t.caps) + truncateToWidth(line, t.caps.terminalWidth)
 }
 
 func (t *Tracker) animate() {
@@ -232,16 +265,34 @@ func (t *Tracker) animate() {
 				item := t.items[t.current]
 				counter := fmt.Sprintf("[%d/%d]", t.current+1, t.total)
 
+				var line string
 				if t.useColor {
 					if item.Info != "" {
-						fmt.Printf("\033[2K\r  \033[1m%s %s  %s\033[0m  \033[2m(%s)  %s\033[0m", spinner, counter, item.Name, item.Info, formatDuration(elapsed))
+						line = fmt.Sprintf(
+							"  \033[1m%s %s  %s\033[0m  \033[2m(%s)  %s\033[0m",
+							spinner,
+							counter,
+							item.Name,
+							item.Info,
+							formatDuration(elapsed),
+						)
 					} else {
-						fmt.Printf("\033[2K\r  \033[1m%s %s  %s\033[0m  \033[2m%s\033[0m", spinner, counter, item.Name, formatDuration(elapsed))
+						line = fmt.Sprintf(
+							"  \033[1m%s %s  %s\033[0m  \033[2m%s\033[0m",
+							spinner,
+							counter,
+							item.Name,
+							formatDuration(elapsed),
+						)
 					}
 				} else {
 					displayName := t.formatDisplayName(item)
-					fmt.Printf("\r  %s %s  %s  %s", spinner, counter, displayName, formatDuration(elapsed))
+					line = fmt.Sprintf("  %s %s  %s  %s", spinner, counter, displayName, formatDuration(elapsed))
 				}
+
+				// Truncate to terminal width to prevent line wrapping
+				line = truncateToWidth(line, t.caps.terminalWidth)
+				fmt.Print(clearLine(t.caps) + line)
 			}
 			t.mu.Unlock()
 		}
@@ -250,7 +301,7 @@ func (t *Tracker) animate() {
 
 func (t *Tracker) printFinal() {
 	// Clear current line
-	fmt.Print("\033[2K\r")
+	fmt.Print(clearLine(t.caps))
 }
 
 // formatDisplayName formats the item name with optional info
@@ -287,7 +338,7 @@ func (t *Tracker) PrintItemComplete(index int) {
 	item := t.items[index]
 
 	// Clear the spinner line and move to new line
-	fmt.Print("\033[2K\r")
+	fmt.Print(clearLine(t.caps))
 
 	var sym string
 	var suffix string

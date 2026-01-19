@@ -29,9 +29,10 @@ func TestRunCommandHandler_Handle_Success(t *testing.T) {
 	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
 	secretsRepository.On("LoadSecrets", "test-context").Return(secrets, nil)
 
-	// For script execution
+	// For script execution (use current OS shell)
+	shell, shellArg := getShellCommand()
 	templater.On("Render", "echo hello", "test-script", mock.Anything).Return("echo hello", nil)
-	commandRunner.On("RunInteractive", "bash", []string{"-c", "echo hello"}).Return(nil)
+	commandRunner.On("RunInteractive", shell, []string{shellArg, "echo hello"}).Return(nil)
 
 	sut := ProvideRunCommandHandler(configRepository, secretsRepository, templater, scm, commandRunner)
 
@@ -72,11 +73,12 @@ func TestRunCommandHandler_Handle_WithServiceDependency(t *testing.T) {
 	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
 	secretsRepository.On("LoadSecrets", "test-context").Return(secrets, nil)
 
-	// For script execution with service dependency
+	// For script execution with service dependency (use current OS shell)
+	shell, shellArg := getShellCommand()
 	scriptWithDep := `cd {{.Services."my-service".path}} && make build`
 	scm.On("Download", "github.com/org/repo", "main", "/path/to/service").Return(nil)
 	templater.On("Render", scriptWithDep, "build-script", mock.Anything).Return("cd /path/to/service && make build", nil)
-	commandRunner.On("RunInteractive", "bash", []string{"-c", "cd /path/to/service && make build"}).Return(nil)
+	commandRunner.On("RunInteractive", shell, []string{shellArg, "cd /path/to/service && make build"}).Return(nil)
 
 	sut := ProvideRunCommandHandler(configRepository, secretsRepository, templater, scm, commandRunner)
 
@@ -303,8 +305,11 @@ func TestRunCommandHandler_Handle_CommandRunError(t *testing.T) {
 	configRepository.On("LoadCurrentContextName").Return("test-context", nil)
 	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
 	secretsRepository.On("LoadSecrets", "test-context").Return(secrets, nil)
+
+	// Use current OS shell
+	shell, shellArg := getShellCommand()
 	templater.On("Render", "exit 1", "failing-script", mock.Anything).Return("exit 1", nil)
-	commandRunner.On("RunInteractive", "bash", []string{"-c", "exit 1"}).Return(runErr)
+	commandRunner.On("RunInteractive", shell, []string{shellArg, "exit 1"}).Return(runErr)
 
 	sut := ProvideRunCommandHandler(configRepository, secretsRepository, templater, scm, commandRunner)
 
@@ -338,10 +343,12 @@ func TestRunCommandHandler_Handle_MultipleScripts(t *testing.T) {
 	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
 	secretsRepository.On("LoadSecrets", "test-context").Return(secrets, nil)
 
+	// Use current OS shell
+	shell, shellArg := getShellCommand()
 	templater.On("Render", "echo first", "script1", mock.Anything).Return("echo first", nil)
 	templater.On("Render", "echo second", "script2", mock.Anything).Return("echo second", nil)
-	commandRunner.On("RunInteractive", "bash", []string{"-c", "echo first"}).Return(nil)
-	commandRunner.On("RunInteractive", "bash", []string{"-c", "echo second"}).Return(nil)
+	commandRunner.On("RunInteractive", shell, []string{shellArg, "echo first"}).Return(nil)
+	commandRunner.On("RunInteractive", shell, []string{shellArg, "echo second"}).Return(nil)
 
 	sut := ProvideRunCommandHandler(configRepository, secretsRepository, templater, scm, commandRunner)
 
@@ -359,4 +366,23 @@ func TestRunCommandHandler_Handle_MultipleScripts(t *testing.T) {
 	templater.AssertExpectations(t)
 	commandRunner.AssertExpectations(t)
 	commandRunner.AssertNumberOfCalls(t, "RunInteractive", 2)
+}
+
+func TestGetShellCommand_ReturnsCorrectShellForOS(t *testing.T) {
+	shell, shellArg := getShellCommand()
+
+	// On the current OS (Linux in CI, potentially Windows locally),
+	// verify we get a valid shell configuration
+	assert.NotEmpty(t, shell, "shell should not be empty")
+	assert.NotEmpty(t, shellArg, "shellArg should not be empty")
+
+	// The function should return either bash/-c or cmd//c
+	validShells := map[string]string{
+		"bash": "-c",
+		"cmd":  "/c",
+	}
+
+	expectedArg, ok := validShells[shell]
+	assert.True(t, ok, "shell should be either 'bash' or 'cmd', got: %s", shell)
+	assert.Equal(t, expectedArg, shellArg, "shell argument mismatch for shell: %s", shell)
 }

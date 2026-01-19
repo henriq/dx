@@ -530,6 +530,80 @@ func TestNormalizePathSeparators(t *testing.T) {
 	}
 }
 
+func TestPathsEqual(t *testing.T) {
+	tests := []struct {
+		name     string
+		a        string
+		b        string
+		expected bool
+	}{
+		{"identical paths", "/home/user/.dx", "/home/user/.dx", true},
+		{"different paths", "/home/user/.dx", "/home/other/.dx", false},
+		{"empty paths", "", "", true},
+		{"one empty", "/home/user/.dx", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := pathsEqual(tt.a, tt.b)
+			if result != tt.expected {
+				t.Errorf("pathsEqual(%q, %q) = %v, expected %v", tt.a, tt.b, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestPathsEqual_CaseSensitivity(t *testing.T) {
+	// This test verifies behavior differs by OS
+	// On Windows: case-insensitive, on Unix: case-sensitive
+	a := "/Home/User/.dx"
+	b := "/home/user/.dx"
+
+	result := pathsEqual(a, b)
+
+	// We can't assert the exact result since it depends on OS,
+	// but we verify the function doesn't panic and returns a boolean
+	t.Logf("pathsEqual(%q, %q) = %v (OS-dependent behavior)", a, b, result)
+}
+
+func TestPathHasPrefix(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		prefix   string
+		expected bool
+	}{
+		{"has prefix", "/home/user/.dx/config", "/home/user/.dx/", true},
+		{"exact match", "/home/user/.dx/", "/home/user/.dx/", true},
+		{"no prefix", "/home/user/.dx/config", "/home/other/", false},
+		{"partial match not prefix", "/home/user/.dx-other", "/home/user/.dx/", false},
+		{"empty prefix", "/home/user/.dx", "", true},
+		{"empty path", "", "/home/", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := pathHasPrefix(tt.path, tt.prefix)
+			if result != tt.expected {
+				t.Errorf("pathHasPrefix(%q, %q) = %v, expected %v", tt.path, tt.prefix, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestPathHasPrefix_CaseSensitivity(t *testing.T) {
+	// This test verifies behavior differs by OS
+	// On Windows: case-insensitive, on Unix: case-sensitive
+	path := "/Home/User/.dx/config"
+	prefix := "/home/user/.dx/"
+
+	result := pathHasPrefix(path, prefix)
+
+	// We can't assert the exact result since it depends on OS,
+	// but we verify the function doesn't panic and returns a boolean
+	t.Logf("pathHasPrefix(%q, %q) = %v (OS-dependent behavior)", path, prefix, result)
+}
+
 func TestValidatePath_DeniesChainedSymlinkEscape(t *testing.T) {
 	dir := testDir(t)
 

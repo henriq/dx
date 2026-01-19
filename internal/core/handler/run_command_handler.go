@@ -82,8 +82,7 @@ func (h *RunCommandHandler) Handle(scripts map[string]string, executionPlan []st
 
 		if err := h.commandRunner.RunInteractive("bash", "-c", renderedScript); err != nil {
 			fmt.Println()
-			output.PrintError(fmt.Sprintf("Script '%s' failed", scriptName))
-			return fmt.Errorf("error running script %s: %v", scriptName, err)
+			return fmt.Errorf("script '%s' failed: %v", scriptName, err)
 		}
 
 		fmt.Println()

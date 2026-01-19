@@ -3,6 +3,8 @@ package cmd
 import (
 	"os"
 
+	"dx/internal/cli/output"
+
 	"github.com/spf13/cobra"
 )
 
@@ -22,11 +24,14 @@ Common workflows:
   dx install                  Deploy all services to local Kubernetes
   dx update                   Build and reinstall services
   dx context set <name>       Switch to a different context`,
+	SilenceUsage:  true,
+	SilenceErrors: true,
 }
 
 func Execute() {
 	profile = rootCmd.PersistentFlags().StringP("profile", "p", DefaultProfile, "Profile to use")
 	if err := rootCmd.Execute(); err != nil {
+		output.PrintError(err.Error())
 		os.Exit(1)
 	}
 }

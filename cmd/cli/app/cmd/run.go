@@ -18,7 +18,6 @@ var runCmd = &cobra.Command{
 	Long:              `Runs a script present in the context`,
 	Args:              ScriptArgsValidator,
 	ValidArgsFunction: ScriptArgsCompletion,
-	SilenceUsage:      true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		handler, err := app.InjectRunCommandHandler()
 		if err != nil {

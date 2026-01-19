@@ -314,7 +314,7 @@ func TestRunCommandHandler_Handle_CommandRunError(t *testing.T) {
 	err := sut.Handle(scripts, executionPlan)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "error running script failing-script")
+	assert.Contains(t, err.Error(), "script 'failing-script' failed")
 	configRepository.AssertExpectations(t)
 	secretsRepository.AssertExpectations(t)
 	templater.AssertExpectations(t)

@@ -35,7 +35,7 @@ func (g *GitClient) UpdateOriginUrl(repositoryPath string, originUrl string) err
 }
 
 func (g *GitClient) FetchRefFromOrigin(repositoryPath string, branch string) error {
-	output, err := g.commandRunner.RunInDir(repositoryPath, "git", "fetch", "origin", "-f", branch)
+	output, err := g.commandRunner.RunInDir(repositoryPath, "git", "-c", "core.autocrlf=false", "fetch", "origin", "-f", branch)
 	if err != nil {
 		return fmt.Errorf("failed to fetch from remote: %v\n%s", err, string(output))
 	}
@@ -52,7 +52,7 @@ func (g *GitClient) GetCurrentRef(repositoryPath string) (string, error) {
 }
 
 func (g *GitClient) Checkout(repositoryPath string, commit string) error {
-	output, err := g.commandRunner.RunInDir(repositoryPath, "git", "checkout", commit)
+	output, err := g.commandRunner.RunInDir(repositoryPath, "git", "-c", "core.autocrlf=false", "checkout", commit)
 	if err != nil {
 		return fmt.Errorf("failed to checkout %s: %v\n%s", commit, err, string(output))
 	}
@@ -75,7 +75,7 @@ func (g *GitClient) GetRevisionForCommit(repositoryPath string, commit string) (
 }
 
 func (g *GitClient) ResetToCommit(repositoryPath string, commit string) error {
-	output, err := g.commandRunner.RunInDir(repositoryPath, "git", "reset", "--hard", commit)
+	output, err := g.commandRunner.RunInDir(repositoryPath, "git", "-c", "core.autocrlf=false", "reset", "--hard", commit)
 	if err != nil {
 		return fmt.Errorf("failed to reset to %s: %v\n%s", commit, err, string(output))
 	}
@@ -84,7 +84,7 @@ func (g *GitClient) ResetToCommit(repositoryPath string, commit string) error {
 }
 
 func (g *GitClient) Download(repositoryPath string, branch string, repositoryUrl string) error {
-	output, err := g.commandRunner.Run("git", "clone", repositoryUrl, "--branch", branch, repositoryPath)
+	output, err := g.commandRunner.Run("git", "clone", "-c", "core.autocrlf=false", repositoryUrl, "--branch", branch, repositoryPath)
 	if err != nil {
 		return fmt.Errorf("failed to clone %s: %v\n%s", repositoryUrl, err, string(output))
 	}

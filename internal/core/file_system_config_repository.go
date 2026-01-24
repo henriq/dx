@@ -253,7 +253,8 @@ func (c *FileSystemConfigRepository) SaveCurrentContextName(currentContextName s
 // expandImportPath expands ~ to home directory for import paths.
 // Import paths can be anywhere on the filesystem, so this is separate from the restricted FileSystem.
 func expandImportPath(path string, home string) string {
-	if strings.HasPrefix(path, "~/") {
+	// Handle both Unix (~/) and Windows (~\) tilde paths
+	if strings.HasPrefix(path, "~/") || strings.HasPrefix(path, "~\\") {
 		return filepath.Join(home, path[2:])
 	}
 	if path == "~" {

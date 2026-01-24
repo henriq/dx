@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -114,17 +115,35 @@ func validatePath(path string) (string, error) {
 		return "", ErrAccessDenied
 	}
 
-	// Check if path is the config file
-	if resolvedPath == configFile {
+	// Check if path is the config file (case-insensitive on Windows)
+	if pathsEqual(resolvedPath, configFile) {
 		return resolvedPath, nil
 	}
 
-	// Check if path is within ~/.dx/ directory
-	if resolvedPath == dxDir || strings.HasPrefix(resolvedPath, dxDir+string(filepath.Separator)) {
+	// Check if path is within ~/.dx/ directory (case-insensitive on Windows)
+	if pathsEqual(resolvedPath, dxDir) || pathHasPrefix(resolvedPath, dxDir+string(filepath.Separator)) {
 		return resolvedPath, nil
 	}
 
 	return "", ErrAccessDenied
+}
+
+// pathsEqual compares two paths for equality.
+// On Windows, comparison is case-insensitive since the filesystem is case-insensitive.
+func pathsEqual(a, b string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
+}
+
+// pathHasPrefix checks if path starts with prefix.
+// On Windows, comparison is case-insensitive since the filesystem is case-insensitive.
+func pathHasPrefix(path, prefix string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.HasPrefix(strings.ToLower(path), strings.ToLower(prefix))
+	}
+	return strings.HasPrefix(path, prefix)
 }
 
 func (f *OsFileSystem) ReadFile(path string) ([]byte, error) {
@@ -217,6 +236,11 @@ func (f *OsFileSystem) HomeDir() (string, error) {
 	return home, nil
 }
 
+// getOsFileModeForAccessMode converts AccessMode to os.FileMode.
+// Note: On Windows, Unix permission bits are largely ignored by the OS.
+// Go's os package handles this gracefully - files are created with default
+// Windows permissions. For sensitive files (like secrets), Windows relies
+// on NTFS ACLs inherited from the parent directory rather than these bits.
 func getOsFileModeForAccessMode(accessMode ports.AccessMode) os.FileMode {
 	switch accessMode {
 	case ports.ReadWrite:

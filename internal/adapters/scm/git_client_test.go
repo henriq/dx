@@ -68,7 +68,7 @@ func TestGitClient_UpdateOriginUrl_Error(t *testing.T) {
 func TestGitClient_FetchRefFromOrigin_Success(t *testing.T) {
 	commandRunner := new(testutil.MockCommandRunner)
 	fileSystem := new(testutil.MockFileSystem)
-	commandRunner.On("RunInDir", "/repo", "git", []string{"fetch", "origin", "-f", "main"}).
+	commandRunner.On("RunInDir", "/repo", "git", []string{"-c", "core.autocrlf=false", "fetch", "origin", "-f", "main"}).
 		Return([]byte("From https://github.com/user/repo\n * branch main -> FETCH_HEAD"), nil)
 
 	client := ProvideGitClient(commandRunner, fileSystem)
@@ -82,7 +82,7 @@ func TestGitClient_FetchRefFromOrigin_Success(t *testing.T) {
 func TestGitClient_FetchRefFromOrigin_Error(t *testing.T) {
 	commandRunner := new(testutil.MockCommandRunner)
 	fileSystem := new(testutil.MockFileSystem)
-	commandRunner.On("RunInDir", "/repo", "git", []string{"fetch", "origin", "-f", "nonexistent"}).
+	commandRunner.On("RunInDir", "/repo", "git", []string{"-c", "core.autocrlf=false", "fetch", "origin", "-f", "nonexistent"}).
 		Return([]byte("fatal: couldn't find remote ref nonexistent"), errors.New("exit status 1"))
 
 	client := ProvideGitClient(commandRunner, fileSystem)
@@ -137,7 +137,7 @@ func TestGitClient_GetCurrentRef_Error(t *testing.T) {
 func TestGitClient_Checkout_Success(t *testing.T) {
 	commandRunner := new(testutil.MockCommandRunner)
 	fileSystem := new(testutil.MockFileSystem)
-	commandRunner.On("RunInDir", "/repo", "git", []string{"checkout", "main"}).
+	commandRunner.On("RunInDir", "/repo", "git", []string{"-c", "core.autocrlf=false", "checkout", "main"}).
 		Return([]byte("Switched to branch 'main'"), nil)
 
 	client := ProvideGitClient(commandRunner, fileSystem)
@@ -151,7 +151,7 @@ func TestGitClient_Checkout_Success(t *testing.T) {
 func TestGitClient_Checkout_Error(t *testing.T) {
 	commandRunner := new(testutil.MockCommandRunner)
 	fileSystem := new(testutil.MockFileSystem)
-	commandRunner.On("RunInDir", "/repo", "git", []string{"checkout", "nonexistent"}).
+	commandRunner.On("RunInDir", "/repo", "git", []string{"-c", "core.autocrlf=false", "checkout", "nonexistent"}).
 		Return([]byte("error: pathspec 'nonexistent' did not match any file(s) known to git"), errors.New("exit status 1"))
 
 	client := ProvideGitClient(commandRunner, fileSystem)
@@ -220,7 +220,7 @@ func TestGitClient_GetRevisionForCommit_Error(t *testing.T) {
 func TestGitClient_ResetToCommit_Success(t *testing.T) {
 	commandRunner := new(testutil.MockCommandRunner)
 	fileSystem := new(testutil.MockFileSystem)
-	commandRunner.On("RunInDir", "/repo", "git", []string{"reset", "--hard", "abc123"}).
+	commandRunner.On("RunInDir", "/repo", "git", []string{"-c", "core.autocrlf=false", "reset", "--hard", "abc123"}).
 		Return([]byte("HEAD is now at abc123 commit message"), nil)
 
 	client := ProvideGitClient(commandRunner, fileSystem)
@@ -234,7 +234,7 @@ func TestGitClient_ResetToCommit_Success(t *testing.T) {
 func TestGitClient_ResetToCommit_Error(t *testing.T) {
 	commandRunner := new(testutil.MockCommandRunner)
 	fileSystem := new(testutil.MockFileSystem)
-	commandRunner.On("RunInDir", "/repo", "git", []string{"reset", "--hard", "invalid"}).
+	commandRunner.On("RunInDir", "/repo", "git", []string{"-c", "core.autocrlf=false", "reset", "--hard", "invalid"}).
 		Return([]byte("fatal: Could not parse object 'invalid'"), errors.New("exit status 1"))
 
 	client := ProvideGitClient(commandRunner, fileSystem)
@@ -248,7 +248,7 @@ func TestGitClient_ResetToCommit_Error(t *testing.T) {
 func TestGitClient_Download_Success(t *testing.T) {
 	commandRunner := new(testutil.MockCommandRunner)
 	fileSystem := new(testutil.MockFileSystem)
-	commandRunner.On("Run", "git", []string{"clone", "https://github.com/user/repo.git", "--branch", "main", "/path/to/dest"}).
+	commandRunner.On("Run", "git", []string{"clone", "-c", "core.autocrlf=false", "https://github.com/user/repo.git", "--branch", "main", "/path/to/dest"}).
 		Return([]byte("Cloning into '/path/to/dest'..."), nil)
 
 	client := ProvideGitClient(commandRunner, fileSystem)
@@ -262,7 +262,7 @@ func TestGitClient_Download_Success(t *testing.T) {
 func TestGitClient_Download_Error(t *testing.T) {
 	commandRunner := new(testutil.MockCommandRunner)
 	fileSystem := new(testutil.MockFileSystem)
-	commandRunner.On("Run", "git", []string{"clone", "https://invalid-url", "--branch", "main", "/path/to/dest"}).
+	commandRunner.On("Run", "git", []string{"clone", "-c", "core.autocrlf=false", "https://invalid-url", "--branch", "main", "/path/to/dest"}).
 		Return([]byte("fatal: repository 'https://invalid-url' not found"), errors.New("exit status 128"))
 
 	client := ProvideGitClient(commandRunner, fileSystem)
@@ -287,7 +287,7 @@ func TestGit_Download_NewRepository_CreatesDirectoryAndClones(t *testing.T) {
 	fileSystem.On("MkdirAll", "/repo", testutil.AnyAccessMode).Return(nil)
 
 	// Should clone the repository
-	commandRunner.On("Run", "git", []string{"clone", "https://github.com/user/repo.git", "--branch", "main", "/repo"}).
+	commandRunner.On("Run", "git", []string{"clone", "-c", "core.autocrlf=false", "https://github.com/user/repo.git", "--branch", "main", "/repo"}).
 		Return([]byte("Cloning..."), nil)
 
 	gitClient := ProvideGitClient(commandRunner, fileSystem)
@@ -312,7 +312,7 @@ func TestGit_Download_ExistingRepository_UpdatesInsteadOfCloning(t *testing.T) {
 		Return([]byte(""), nil)
 
 	// Should fetch the ref
-	commandRunner.On("RunInDir", "/repo", "git", []string{"fetch", "origin", "-f", "main"}).
+	commandRunner.On("RunInDir", "/repo", "git", []string{"-c", "core.autocrlf=false", "fetch", "origin", "-f", "main"}).
 		Return([]byte(""), nil)
 
 	// Should check current ref (already on main)
@@ -348,7 +348,7 @@ func TestGit_Download_Deduplication_SameRepoRefNotClonedTwice(t *testing.T) {
 
 	// Should create directory and clone only once
 	fileSystem.On("MkdirAll", "/repo", testutil.AnyAccessMode).Return(nil).Once()
-	commandRunner.On("Run", "git", []string{"clone", "https://github.com/user/repo.git", "--branch", "main", "/repo"}).
+	commandRunner.On("Run", "git", []string{"clone", "-c", "core.autocrlf=false", "https://github.com/user/repo.git", "--branch", "main", "/repo"}).
 		Return([]byte("Cloning..."), nil).Once()
 
 	gitClient := ProvideGitClient(commandRunner, fileSystem)
@@ -373,18 +373,18 @@ func TestGit_Download_DifferentRefs_BothDownloaded(t *testing.T) {
 	// First download: repo doesn't exist
 	fileSystem.On("FileExists", "/repo/.git/HEAD").Return(false, nil).Once()
 	fileSystem.On("MkdirAll", "/repo", testutil.AnyAccessMode).Return(nil).Once()
-	commandRunner.On("Run", "git", []string{"clone", "https://github.com/user/repo.git", "--branch", "main", "/repo"}).
+	commandRunner.On("Run", "git", []string{"clone", "-c", "core.autocrlf=false", "https://github.com/user/repo.git", "--branch", "main", "/repo"}).
 		Return([]byte("Cloning..."), nil).Once()
 
 	// Second download with different ref: repo now exists
 	fileSystem.On("FileExists", "/repo/.git/HEAD").Return(true, nil).Once()
 	commandRunner.On("RunInDir", "/repo", "git", []string{"remote", "set-url", "origin", "https://github.com/user/repo.git"}).
 		Return([]byte(""), nil)
-	commandRunner.On("RunInDir", "/repo", "git", []string{"fetch", "origin", "-f", "feature"}).
+	commandRunner.On("RunInDir", "/repo", "git", []string{"-c", "core.autocrlf=false", "fetch", "origin", "-f", "feature"}).
 		Return([]byte(""), nil)
 	commandRunner.On("RunInDir", "/repo", "git", []string{"rev-parse", "--abbrev-ref", "HEAD"}).
 		Return([]byte("main\n"), nil)
-	commandRunner.On("RunInDir", "/repo", "git", []string{"checkout", "feature"}).
+	commandRunner.On("RunInDir", "/repo", "git", []string{"-c", "core.autocrlf=false", "checkout", "feature"}).
 		Return([]byte(""), nil)
 	commandRunner.On("RunInDir", "/repo", "git", []string{"rev-parse", "--verify", "--quiet", "refs/remotes/origin/feature"}).
 		Return([]byte(""), errors.New("not a branch")) // Tag, not branch
@@ -416,7 +416,7 @@ func TestGit_Download_ExistingRepo_ResetsToBranch_WhenBehindOrigin(t *testing.T)
 		Return([]byte(""), nil)
 
 	// Fetch
-	commandRunner.On("RunInDir", "/repo", "git", []string{"fetch", "origin", "-f", "main"}).
+	commandRunner.On("RunInDir", "/repo", "git", []string{"-c", "core.autocrlf=false", "fetch", "origin", "-f", "main"}).
 		Return([]byte(""), nil)
 
 	// Already on main
@@ -434,7 +434,7 @@ func TestGit_Download_ExistingRepo_ResetsToBranch_WhenBehindOrigin(t *testing.T)
 		Return([]byte("new456\n"), nil)
 
 	// Should reset to origin/main
-	commandRunner.On("RunInDir", "/repo", "git", []string{"reset", "--hard", "origin/main"}).
+	commandRunner.On("RunInDir", "/repo", "git", []string{"-c", "core.autocrlf=false", "reset", "--hard", "origin/main"}).
 		Return([]byte("HEAD is now at new456"), nil)
 
 	gitClient := ProvideGitClient(commandRunner, fileSystem)
@@ -443,5 +443,5 @@ func TestGit_Download_ExistingRepo_ResetsToBranch_WhenBehindOrigin(t *testing.T)
 	err := git.Download("https://github.com/user/repo.git", "main", "/repo")
 
 	require.NoError(t, err)
-	commandRunner.AssertCalled(t, "RunInDir", "/repo", "git", []string{"reset", "--hard", "origin/main"})
+	commandRunner.AssertCalled(t, "RunInDir", "/repo", "git", []string{"-c", "core.autocrlf=false", "reset", "--hard", "origin/main"})
 }

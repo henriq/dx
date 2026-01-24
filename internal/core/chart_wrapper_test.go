@@ -550,7 +550,6 @@ func TestGenerateChartYaml_WithoutAnnotations(t *testing.T) {
 	assert.NotContains(t, yaml, "annotations:")
 }
 
-
 func TestExpandTildePath(t *testing.T) {
 	home := "/home/testuser"
 

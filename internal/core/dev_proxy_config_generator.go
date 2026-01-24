@@ -25,11 +25,11 @@ var templateFiles embed.FS
 
 // DevProxyConfigs holds all generated configuration files for the dev-proxy.
 type DevProxyConfigs struct {
-	HAProxyConfig      []byte
-	HAProxyDockerfile  []byte
+	HAProxyConfig       []byte
+	HAProxyDockerfile   []byte
 	MitmProxyDockerfile []byte
-	HelmChartYaml      []byte
-	HelmDeploymentYaml []byte
+	HelmChartYaml       []byte
+	HelmDeploymentYaml  []byte
 }
 
 // DevProxyConfigGenerator generates dev-proxy configuration files from domain configuration.
@@ -129,6 +129,9 @@ var templateFunctions = template.FuncMap{
 		return buf.String()
 	},
 	"indent": func(indent int, s string) string {
+		// Normalize line endings to handle both Unix (\n) and Windows (\r\n)
+		s = strings.ReplaceAll(s, "\r\n", "\n")
+		s = strings.ReplaceAll(s, "\r", "\n")
 		lines := strings.Split(s, "\n")
 		for i, line := range lines {
 			lines[i] = strings.Repeat(" ", indent) + line

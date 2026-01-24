@@ -21,14 +21,14 @@ import (
 
 // Kubernetes represents a client for interacting with Kubernetes
 type Kubernetes struct {
-	configRepository core.ConfigRepository
+	configRepository  core.ConfigRepository
 	secretsRepository core.SecretsRepository
-	templater        ports.Templater
-	clientSet        *kubernetes.Clientset
-	helmClient       ports.HelmClient
-	kustomizeClient  ports.KustomizeClient
-	chartWrapper     *core.ChartWrapper
-	fileService      ports.FileSystem
+	templater         ports.Templater
+	clientSet         *kubernetes.Clientset
+	helmClient        ports.HelmClient
+	kustomizeClient   ports.KustomizeClient
+	chartWrapper      *core.ChartWrapper
+	fileService       ports.FileSystem
 }
 
 func ProvideKubernetes(
@@ -138,7 +138,7 @@ func (k *Kubernetes) InstallService(service *domain.Service) error {
 		return err
 	}
 
-	chartPath := fmt.Sprintf("%s/%s", service.HelmPath, service.HelmChartRelativePath)
+	chartPath := filepath.Join(service.HelmPath, service.HelmChartRelativePath)
 	namespace := k.getCurrentNamespace()
 
 	// 1. Render helm chart to get raw manifests
@@ -244,7 +244,7 @@ func (k *Kubernetes) InstallDevProxy(service *domain.Service) error {
 		return err
 	}
 
-	chartPath := fmt.Sprintf("%s/%s", service.HelmPath, service.HelmChartRelativePath)
+	chartPath := filepath.Join(service.HelmPath, service.HelmChartRelativePath)
 	namespace := k.getCurrentNamespace()
 
 	// For dev-proxy, no patches needed - just template and install

@@ -55,6 +55,45 @@ func TestExpandImportPath(t *testing.T) {
 	}
 }
 
+func TestExpandImportPath_WindowsStyle(t *testing.T) {
+	// Test with Windows-style home directory
+	home := `C:\Users\testuser`
+
+	tests := []struct {
+		name     string
+		path     string
+		expected string
+	}{
+		{
+			name:     "tilde with backslash",
+			path:     `~\projects\config.yaml`,
+			expected: filepath.Join(home, `projects\config.yaml`),
+		},
+		{
+			name:     "tilde with forward slash on windows home",
+			path:     "~/projects/config.yaml",
+			expected: filepath.Join(home, "projects/config.yaml"),
+		},
+		{
+			name:     "tilde only",
+			path:     "~",
+			expected: home,
+		},
+		{
+			name:     "windows absolute path unchanged",
+			path:     `C:\Program Files\config.yaml`,
+			expected: `C:\Program Files\config.yaml`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := expandImportPath(tt.path, home)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestValidateContextName(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -298,8 +337,8 @@ func TestMergeConfigurationContexts(t *testing.T) {
 	overlay := domain.ConfigurationContext{
 		Name: "overlay",
 		Scripts: map[string]string{
-			"build": "echo overlay", // Override
-			"deploy": "echo deploy", // New
+			"build":  "echo overlay", // Override
+			"deploy": "echo deploy",  // New
 		},
 		Services: []domain.Service{
 			{Name: "svc1", GitRef: "feature"}, // Override gitRef

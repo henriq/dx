@@ -242,3 +242,64 @@ func isHexString(s string) bool {
 	}
 	return true
 }
+
+func TestTemplateFunctions_Indent_NormalizesLineEndings(t *testing.T) {
+	indentFunc := templateFunctions["indent"].(func(int, string) string)
+
+	tests := []struct {
+		name     string
+		indent   int
+		input    string
+		expected string
+	}{
+		{
+			name:     "unix line endings",
+			indent:   2,
+			input:    "line1\nline2\nline3",
+			expected: "  line1\n  line2\n  line3",
+		},
+		{
+			name:     "windows CRLF line endings",
+			indent:   2,
+			input:    "line1\r\nline2\r\nline3",
+			expected: "  line1\n  line2\n  line3",
+		},
+		{
+			name:     "old mac CR line endings",
+			indent:   2,
+			input:    "line1\rline2\rline3",
+			expected: "  line1\n  line2\n  line3",
+		},
+		{
+			name:     "mixed line endings",
+			indent:   2,
+			input:    "line1\r\nline2\nline3\rline4",
+			expected: "  line1\n  line2\n  line3\n  line4",
+		},
+		{
+			name:     "single line no ending",
+			indent:   4,
+			input:    "single line",
+			expected: "    single line",
+		},
+		{
+			name:     "empty string",
+			indent:   2,
+			input:    "",
+			expected: "  ",
+		},
+		{
+			name:     "zero indent",
+			indent:   0,
+			input:    "line1\nline2",
+			expected: "line1\nline2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := indentFunc(tt.indent, tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

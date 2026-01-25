@@ -33,6 +33,10 @@ func (m *mockCommandRunner) RunInDir(dir, name string, args ...string) ([]byte, 
 	return nil, nil
 }
 
+func (m *mockCommandRunner) RunWithEnvInDir(dir string, env []string, name string, args ...string) ([]byte, error) {
+	return nil, nil
+}
+
 func (m *mockCommandRunner) RunWithStdin(stdin io.Reader, name string, args ...string) ([]byte, error) {
 	return nil, nil
 }

@@ -432,6 +432,31 @@ brew uninstall dx
 - Check that the `gitRepoPath` exists and contains the expected files
 - Verify `dockerfilePath` or `dockerfileOverride` is correct
 
+**SSH authentication errors (password-protected keys)**
+
+If you're using SSH URLs for git repositories (e.g., `git@github.com:user/repo.git`) and your SSH key has a passphrase, DX will fail with an "SSH authentication failed" error. This happens because DX runs git commands non-interactively.
+
+To fix this, add your SSH key to the ssh-agent before running DX:
+
+```bash
+# Start ssh-agent if not already running
+eval "$(ssh-agent -s)"
+
+# Add your SSH key (will prompt for passphrase once)
+ssh-add ~/.ssh/id_rsa
+
+# Now DX commands will work
+dx build
+dx update
+```
+
+On macOS, you can add the key permanently to the keychain:
+```bash
+ssh-add --apple-use-keychain ~/.ssh/id_rsa
+```
+
+On Linux, you can configure your shell profile to start ssh-agent automatically.
+
 **Need to debug further?**
 - Check dev-proxy logs: `kubectl logs -l app=dev-proxy`
 - Check service logs: `kubectl logs -l app=<service-name>`

@@ -32,6 +32,13 @@ func (r *OsCommandRunner) RunInDir(dir, name string, args ...string) ([]byte, er
 	return cmd.CombinedOutput()
 }
 
+func (r *OsCommandRunner) RunWithEnvInDir(dir string, env []string, name string, args ...string) ([]byte, error) {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), env...)
+	return cmd.CombinedOutput()
+}
+
 func (r *OsCommandRunner) RunWithStdin(stdin io.Reader, name string, args ...string) ([]byte, error) {
 	cmd := exec.Command(name, args...)
 	cmd.Stdin = stdin

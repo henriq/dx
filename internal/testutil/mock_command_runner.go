@@ -35,6 +35,14 @@ func (m *MockCommandRunner) RunInDir(dir, name string, args ...string) ([]byte, 
 	return callArgs.Get(0).([]byte), callArgs.Error(1)
 }
 
+func (m *MockCommandRunner) RunWithEnvInDir(dir string, env []string, name string, args ...string) ([]byte, error) {
+	callArgs := m.Called(dir, env, name, args)
+	if callArgs.Get(0) == nil {
+		return nil, callArgs.Error(1)
+	}
+	return callArgs.Get(0).([]byte), callArgs.Error(1)
+}
+
 func (m *MockCommandRunner) RunWithStdin(stdin io.Reader, name string, args ...string) ([]byte, error) {
 	callArgs := m.Called(stdin, name, args)
 	if callArgs.Get(0) == nil {

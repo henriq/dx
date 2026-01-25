@@ -169,11 +169,7 @@ func (t *Tracker) CompleteItem(index int, err error) {
 			status,
 			formatDuration(t.items[index].Duration),
 		)
-
-		// Print error details if present
-		if err != nil {
-			fmt.Printf("\n%s\n", err.Error())
-		}
+		// Note: Error details are printed by the root error handler, not here
 	}
 }
 
@@ -370,16 +366,7 @@ func (t *Tracker) PrintItemComplete(index int) {
 	}
 
 	fmt.Printf("  %s %s  %s  %s\n", sym, counter, displayName, suffix)
-
-	// Print error details if present
-	if item.Error != nil {
-		errMsg := item.Error.Error()
-		if t.useColor {
-			fmt.Fprintf(os.Stderr, "\n\033[31m%s\033[0m\n", errMsg)
-		} else {
-			fmt.Fprintf(os.Stderr, "\n%s\n", errMsg)
-		}
-	}
+	// Note: Error details are printed by the root error handler, not here
 }
 
 func formatDuration(d time.Duration) string {

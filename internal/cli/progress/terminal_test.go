@@ -3,6 +3,7 @@ package progress
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // Compile-time check that initTerminal exists and returns bool across all platforms
@@ -178,5 +179,37 @@ func TestTruncateToWidth_VisibleLength(t *testing.T) {
 
 	if visibleCount != 10 {
 		t.Errorf("expected 10 visible characters, got %d", visibleCount)
+	}
+}
+
+func TestFormatDuration(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    time.Duration
+		expected string
+	}{
+		{"zero", 0, "<1s"},
+		{"sub-second", 500 * time.Millisecond, "<1s"},
+		{"one second", time.Second, "1s"},
+		{"five seconds", 5 * time.Second, "5s"},
+		{"59 seconds", 59 * time.Second, "59s"},
+		{"one minute", 60 * time.Second, "1m 00s"},
+		{"one minute one second", 61 * time.Second, "1m 01s"},
+		{"one minute thirty seconds", 90 * time.Second, "1m 30s"},
+		{"12 minutes 43 seconds", 12*time.Minute + 43*time.Second, "12m 43s"},
+		{"one hour", 60 * time.Minute, "60m 00s"},
+		{"one hour one minute one second", 61*time.Minute + 1*time.Second, "61m 01s"},
+		{"truncates 1.4s to 1s", 1400 * time.Millisecond, "1s"},
+		{"truncates 1.9s to 1s", 1900 * time.Millisecond, "1s"},
+		{"truncates 2.5s to 2s", 2500 * time.Millisecond, "2s"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := FormatDuration(tc.input)
+			if result != tc.expected {
+				t.Errorf("FormatDuration(%v) = %q, want %q", tc.input, result, tc.expected)
+			}
+		})
 	}
 }

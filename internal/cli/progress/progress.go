@@ -167,7 +167,7 @@ func (t *Tracker) CompleteItem(index int, err error) {
 			sym,
 			t.items[index].Name,
 			status,
-			formatDuration(t.items[index].Duration),
+			FormatDuration(t.items[index].Duration),
 		)
 		// Note: Error details are printed by the root error handler, not here
 	}
@@ -221,7 +221,7 @@ func (t *Tracker) GetStatus() string {
 				counter,
 				item.Name,
 				item.Info,
-				formatDuration(elapsed),
+				FormatDuration(elapsed),
 			)
 		} else {
 			line = fmt.Sprintf(
@@ -229,12 +229,12 @@ func (t *Tracker) GetStatus() string {
 				spinner,
 				counter,
 				item.Name,
-				formatDuration(elapsed),
+				FormatDuration(elapsed),
 			)
 		}
 	} else {
 		displayName := t.formatDisplayName(item)
-		line = fmt.Sprintf("  %s %s  %s  %s", spinner, counter, displayName, formatDuration(elapsed))
+		line = fmt.Sprintf("  %s %s  %s  %s", spinner, counter, displayName, FormatDuration(elapsed))
 	}
 
 	// Truncate to terminal width to prevent line wrapping
@@ -270,7 +270,7 @@ func (t *Tracker) animate() {
 							counter,
 							item.Name,
 							item.Info,
-							formatDuration(elapsed),
+							FormatDuration(elapsed),
 						)
 					} else {
 						line = fmt.Sprintf(
@@ -278,12 +278,12 @@ func (t *Tracker) animate() {
 							spinner,
 							counter,
 							item.Name,
-							formatDuration(elapsed),
+							FormatDuration(elapsed),
 						)
 					}
 				} else {
 					displayName := t.formatDisplayName(item)
-					line = fmt.Sprintf("  %s %s  %s  %s", spinner, counter, displayName, formatDuration(elapsed))
+					line = fmt.Sprintf("  %s %s  %s  %s", spinner, counter, displayName, FormatDuration(elapsed))
 				}
 
 				// Truncate to terminal width to prevent line wrapping
@@ -346,14 +346,14 @@ func (t *Tracker) PrintItemComplete(index int) {
 		} else {
 			sym = "+"
 		}
-		suffix = fmt.Sprintf("(%s)", formatDuration(item.Duration))
+		suffix = fmt.Sprintf("(%s)", FormatDuration(item.Duration))
 	case StatusFailed:
 		if t.useColor {
 			sym = "\033[31mx\033[0m" // red
 		} else {
 			sym = "x"
 		}
-		suffix = fmt.Sprintf("(%s) FAILED", formatDuration(item.Duration))
+		suffix = fmt.Sprintf("(%s) FAILED", FormatDuration(item.Duration))
 	}
 
 	counter := fmt.Sprintf("[%d/%d]", index+1, t.total)
@@ -369,10 +369,15 @@ func (t *Tracker) PrintItemComplete(index int) {
 	// Note: Error details are printed by the root error handler, not here
 }
 
-func formatDuration(d time.Duration) string {
-	d = d.Round(time.Second)
-	m := d / time.Minute
-	s := (d % time.Minute) / time.Second
+// FormatDuration formats a duration as a human-readable string (e.g., "12m 43s", "5s", or "<1s")
+func FormatDuration(d time.Duration) string {
+	if d < time.Second {
+		return "<1s"
+	}
+	// Truncate to seconds so each display state lasts a full second
+	totalSeconds := int(d.Seconds())
+	m := totalSeconds / 60
+	s := totalSeconds % 60
 
 	if m > 0 {
 		return fmt.Sprintf("%dm %02ds", m, s)
@@ -407,5 +412,5 @@ func (t *Tracker) Summary() string {
 		parts = append(parts, fmt.Sprintf("%d failed", failCount))
 	}
 
-	return fmt.Sprintf("%s in %s", strings.Join(parts, ", "), formatDuration(totalDuration))
+	return fmt.Sprintf("%s in %s", strings.Join(parts, ", "), FormatDuration(totalDuration))
 }

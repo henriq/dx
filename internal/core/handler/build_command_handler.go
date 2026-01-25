@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"dx/internal/cli/output"
 	"dx/internal/cli/progress"
@@ -59,6 +60,7 @@ func (h *BuildCommandHandler) Handle(services []string, selectedProfile string) 
 			},
 		)
 
+		buildStartTime := time.Now()
 		output.PrintHeader("Building Docker images")
 		fmt.Println()
 
@@ -110,13 +112,14 @@ func (h *BuildCommandHandler) Handle(services []string, selectedProfile string) 
 		}
 
 		fmt.Println()
-		output.PrintSuccess(fmt.Sprintf("Built %d Docker %s", len(dockerImagesToBuild), output.Plural(len(dockerImagesToBuild), "image", "images")))
+		output.PrintSuccess(fmt.Sprintf("Built %d Docker %s in %s", len(dockerImagesToBuild), output.Plural(len(dockerImagesToBuild), "image", "images"), progress.FormatDuration(time.Since(buildStartTime))))
 		fmt.Println()
 	}
 
 	if len(dockerImagesToPull) > 0 {
 		slices.Sort(dockerImagesToPull)
 
+		pullStartTime := time.Now()
 		output.PrintHeader("Pulling Docker images")
 		fmt.Println()
 
@@ -146,7 +149,7 @@ func (h *BuildCommandHandler) Handle(services []string, selectedProfile string) 
 		}
 
 		fmt.Println()
-		output.PrintSuccess(fmt.Sprintf("Pulled %d Docker %s", len(dockerImagesToPull), output.Plural(len(dockerImagesToPull), "image", "images")))
+		output.PrintSuccess(fmt.Sprintf("Pulled %d Docker %s in %s", len(dockerImagesToPull), output.Plural(len(dockerImagesToPull), "image", "images"), progress.FormatDuration(time.Since(pullStartTime))))
 	}
 
 	return nil

@@ -16,6 +16,7 @@ import (
 	"dx/internal/adapters/scm"
 	"dx/internal/adapters/symmetric_encryptor"
 	"dx/internal/adapters/templater"
+	"dx/internal/adapters/terminal"
 	"dx/internal/core"
 	"dx/internal/core/handler"
 	"dx/internal/ports"
@@ -157,7 +158,8 @@ func InjectSecretCommandHandler() (handler.SecretCommandHandler, error) {
 	secretsRepository := core.ProvideEncryptedFileSecretRepository(osFileSystem, portsKeyring, aesGcmEncryptor)
 	portsTemplater := templater.ProvideTextTemplater()
 	fileSystemConfigRepository := core.ProvideFileSystemConfigRepository(osFileSystem, secretsRepository, portsTemplater)
-	secretCommandHandler := handler.ProvideSecretCommandHandler(secretsRepository, fileSystemConfigRepository)
+	terminalInput := terminal.ProvideTerminalInput()
+	secretCommandHandler := handler.ProvideSecretCommandHandler(secretsRepository, fileSystemConfigRepository, terminalInput)
 	return secretCommandHandler, nil
 }
 
@@ -199,7 +201,7 @@ func InjectGenerateCommandHandler() (handler.GenerateCommandHandler, error) {
 
 // wire.go:
 
-var Adapter = wire.NewSet(command_runner.ProvideOsCommandRunner, wire.Bind(new(ports.CommandRunner), new(*command_runner.OsCommandRunner)), scm.ProvideGitClient, scm.ProvideGit, wire.Bind(new(ports.Scm), new(*scm.Git)), container_image_repository.ProvideDockerRepository, wire.Bind(new(ports.ContainerImageRepository), new(*container_image_repository.DockerRepository)), container_orchestrator.ProvideHelmClient, wire.Bind(new(ports.HelmClient), new(*container_orchestrator.HelmClient)), kustomize.ProvideKustomizeClient, wire.Bind(new(ports.KustomizeClient), new(*kustomize.Client)), container_orchestrator.ProvideKubernetes, wire.Bind(new(ports.ContainerOrchestrator), new(*container_orchestrator.Kubernetes)), filesystem.ProvideOsFileSystem, wire.Bind(new(ports.FileSystem), new(*filesystem.OsFileSystem)), keyring.ProvideZalandoKeyring, symmetric_encryptor.ProvideAesGcmEncryptor, wire.Bind(new(ports.SymmetricEncryptor), new(*symmetric_encryptor.AesGcmEncryptor)), templater.ProvideTextTemplater)
+var Adapter = wire.NewSet(command_runner.ProvideOsCommandRunner, wire.Bind(new(ports.CommandRunner), new(*command_runner.OsCommandRunner)), scm.ProvideGitClient, scm.ProvideGit, wire.Bind(new(ports.Scm), new(*scm.Git)), container_image_repository.ProvideDockerRepository, wire.Bind(new(ports.ContainerImageRepository), new(*container_image_repository.DockerRepository)), container_orchestrator.ProvideHelmClient, wire.Bind(new(ports.HelmClient), new(*container_orchestrator.HelmClient)), kustomize.ProvideKustomizeClient, wire.Bind(new(ports.KustomizeClient), new(*kustomize.Client)), container_orchestrator.ProvideKubernetes, wire.Bind(new(ports.ContainerOrchestrator), new(*container_orchestrator.Kubernetes)), filesystem.ProvideOsFileSystem, wire.Bind(new(ports.FileSystem), new(*filesystem.OsFileSystem)), keyring.ProvideZalandoKeyring, symmetric_encryptor.ProvideAesGcmEncryptor, wire.Bind(new(ports.SymmetricEncryptor), new(*symmetric_encryptor.AesGcmEncryptor)), templater.ProvideTextTemplater, terminal.ProvideTerminalInput, wire.Bind(new(ports.TerminalInput), new(*terminal.TerminalInput)))
 
 // CoreSet provides domain/core dependencies
 var CoreSet = wire.NewSet(core.ProvideFileSystemConfigRepository, wire.Bind(new(core.ConfigRepository), new(*core.FileSystemConfigRepository)), core.ProvideDevProxyConfigGenerator, core.ProvideDevProxyManager, core.ProvideEncryptedFileSecretRepository, core.ProvideEnvironmentEnsurer, core.ProvideChartWrapper)

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"dx/internal/core"
@@ -38,8 +39,16 @@ func prettyPrintValuesMap(values map[string]interface{}) {
 }
 
 func prettyPrintMap(values map[string]interface{}, indent int, hidden bool) {
+	// Sort keys for deterministic output
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
 	indentString := strings.Repeat(" ", indent)
-	for key, value := range values {
+	for _, key := range keys {
+		value := values[key]
 		if _, ok := value.(string); ok {
 			if hidden {
 				fmt.Printf("%s%s: ******\n", indentString, key)

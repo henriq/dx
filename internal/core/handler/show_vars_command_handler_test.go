@@ -1,13 +1,17 @@
 package handler
 
 import (
+	"bytes"
 	"errors"
+	"io"
+	"os"
 	"testing"
 
 	"dx/internal/core/domain"
 	"dx/internal/testutil"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestShowVarsCommandHandler_Handle_Success(t *testing.T) {
@@ -112,6 +116,67 @@ func TestShowVarsCommandHandler_Handle_LoadSecretsError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Equal(t, expectedErr, err)
+	configRepository.AssertExpectations(t)
+	secretsRepository.AssertExpectations(t)
+}
+
+func TestShowVarsCommandHandler_Handle_SortedOutput(t *testing.T) {
+	secretsRepository := new(testutil.MockSecretsRepository)
+	configRepository := new(testutil.MockConfigRepository)
+
+	configContext := &domain.ConfigurationContext{
+		Name: "test-context",
+		Services: []domain.Service{
+			{Name: "zebra-service", Path: "/path/to/zebra"},
+			{Name: "alpha-service", Path: "/path/to/alpha"},
+			{Name: "mike-service", Path: "/path/to/mike"},
+		},
+	}
+	secrets := []*domain.Secret{
+		{Key: "ZEBRA_SECRET", Value: "zebra-value"},
+		{Key: "ALPHA_SECRET", Value: "alpha-value"},
+		{Key: "MIKE_SECRET", Value: "mike-value"},
+	}
+
+	configRepository.On("LoadCurrentContextName").Return("test-context", nil)
+	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
+	secretsRepository.On("LoadSecrets", "test-context").Return(secrets, nil)
+
+	sut := ProvideShowVarsCommandHandler(secretsRepository, configRepository)
+
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := sut.Handle()
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	_, copyErr := io.Copy(&buf, r)
+	require.NoError(t, copyErr)
+	output := buf.String()
+
+	require.NoError(t, err)
+
+	// Verify secrets are sorted alphabetically
+	alphaSecretPos := bytes.Index([]byte(output), []byte("ALPHA_SECRET"))
+	mikeSecretPos := bytes.Index([]byte(output), []byte("MIKE_SECRET"))
+	zebraSecretPos := bytes.Index([]byte(output), []byte("ZEBRA_SECRET"))
+
+	assert.True(t, alphaSecretPos < mikeSecretPos, "ALPHA_SECRET should appear before MIKE_SECRET")
+	assert.True(t, mikeSecretPos < zebraSecretPos, "MIKE_SECRET should appear before ZEBRA_SECRET")
+
+	// Verify services are sorted alphabetically
+	alphaServicePos := bytes.Index([]byte(output), []byte("alpha-service"))
+	mikeServicePos := bytes.Index([]byte(output), []byte("mike-service"))
+	zebraServicePos := bytes.Index([]byte(output), []byte("zebra-service"))
+
+	assert.True(t, alphaServicePos < mikeServicePos, "alpha-service should appear before mike-service")
+	assert.True(t, mikeServicePos < zebraServicePos, "mike-service should appear before zebra-service")
+
 	configRepository.AssertExpectations(t)
 	secretsRepository.AssertExpectations(t)
 }

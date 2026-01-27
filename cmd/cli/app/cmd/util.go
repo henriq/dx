@@ -48,10 +48,41 @@ func ServiceArgsCompletion(
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}
-	var matchingServices []string
+	var services []string
 	for _, s := range configContext.Services {
-		matchingServices = append(matchingServices, s.Name)
+		services = append(services, s.Name)
 	}
 
-	return matchingServices, cobra.ShellCompDirectiveNoFileComp
+	return services, cobra.ShellCompDirectiveNoFileComp
+}
+
+func SecretKeysCompletion(
+	cmd *cobra.Command,
+	args []string,
+	toComplete string,
+) ([]string, cobra.ShellCompDirective) {
+	secretsRepo, err := app.InjectSecretRepository()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+	configRepo, err := app.InjectConfigRepo()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	currentContextName, err := configRepo.LoadCurrentContextName()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	secrets, err := secretsRepo.LoadSecrets(currentContextName)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	var secretKeys []string
+	for _, secret := range secrets {
+		secretKeys = append(secretKeys, secret.Key)
+	}
+	return secretKeys, cobra.ShellCompDirectiveNoFileComp
 }

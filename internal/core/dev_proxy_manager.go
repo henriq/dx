@@ -35,6 +35,28 @@ func ProvideDevProxyManager(
 	}
 }
 
+// ShouldRebuildDevProxy determines if the dev-proxy needs to be rebuilt.
+// Returns true if the dev-proxy doesn't exist or if the configuration has changed.
+func (d *DevProxyManager) ShouldRebuildDevProxy() (bool, error) {
+	configContext, err := d.configRepository.LoadCurrentConfigurationContext()
+	if err != nil {
+		return false, fmt.Errorf("failed to load configuration context: %w", err)
+	}
+
+	currentChecksum, err := d.containerOrchestrator.GetDevProxyChecksum()
+	if err != nil {
+		return false, fmt.Errorf("failed to get current dev-proxy checksum: %w", err)
+	}
+
+	// If no checksum exists, dev-proxy needs to be built
+	if currentChecksum == "" {
+		return true, nil
+	}
+
+	newChecksum := d.configGenerator.GenerateChecksum(configContext)
+	return currentChecksum != newChecksum, nil
+}
+
 // SaveConfiguration generates and saves all dev-proxy configuration files
 // to $HOME/.dx/$CONTEXT_NAME/dev-proxy/
 func (d *DevProxyManager) SaveConfiguration() error {

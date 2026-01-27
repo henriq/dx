@@ -33,7 +33,6 @@ func TestSaveConfiguration_Success(t *testing.T) {
 	containerImageRepository := new(testutil.MockContainerImageRepository)
 	containerOrchestrator := new(testutil.MockContainerOrchestrator)
 	configGenerator := ProvideDevProxyConfigGenerator()
-
 	configContext := createTestConfigContext()
 	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
 	fileSystem.On("WriteFile", "~/.dx/test-context/dev-proxy/haproxy/haproxy.cfg", mock.Anything, mock.Anything).Return(nil)
@@ -58,7 +57,6 @@ func TestSaveConfiguration_LoadConfigError(t *testing.T) {
 	containerImageRepository := new(testutil.MockContainerImageRepository)
 	containerOrchestrator := new(testutil.MockContainerOrchestrator)
 	configGenerator := ProvideDevProxyConfigGenerator()
-
 	expectedErr := errors.New("load config error")
 	configRepository.On("LoadCurrentConfigurationContext").Return(nil, expectedErr)
 
@@ -77,7 +75,6 @@ func TestSaveConfiguration_WriteHaproxyConfigError(t *testing.T) {
 	containerImageRepository := new(testutil.MockContainerImageRepository)
 	containerOrchestrator := new(testutil.MockContainerOrchestrator)
 	configGenerator := ProvideDevProxyConfigGenerator()
-
 	configContext := createTestConfigContext()
 	expectedErr := errors.New("write haproxy config error")
 	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
@@ -233,7 +230,6 @@ func TestBuildDevProxy_LoadConfigError(t *testing.T) {
 	containerImageRepository := new(testutil.MockContainerImageRepository)
 	containerOrchestrator := new(testutil.MockContainerOrchestrator)
 	configGenerator := ProvideDevProxyConfigGenerator()
-
 	expectedErr := errors.New("load config error")
 	configRepository.On("LoadCurrentConfigurationContext").Return(nil, expectedErr)
 
@@ -374,7 +370,6 @@ func TestInstallDevProxy_LoadConfigError(t *testing.T) {
 	containerImageRepository := new(testutil.MockContainerImageRepository)
 	containerOrchestrator := new(testutil.MockContainerOrchestrator)
 	configGenerator := ProvideDevProxyConfigGenerator()
-
 	expectedErr := errors.New("load config error")
 	configRepository.On("LoadCurrentConfigurationContext").Return(nil, expectedErr)
 
@@ -472,7 +467,6 @@ func TestUninstallDevProxy_LoadConfigError(t *testing.T) {
 	containerImageRepository := new(testutil.MockContainerImageRepository)
 	containerOrchestrator := new(testutil.MockContainerOrchestrator)
 	configGenerator := ProvideDevProxyConfigGenerator()
-
 	expectedErr := errors.New("load config error")
 	configRepository.On("LoadCurrentConfigurationContext").Return(nil, expectedErr)
 
@@ -534,5 +528,115 @@ func TestUninstallDevProxy_UninstallError(t *testing.T) {
 	assert.Equal(t, expectedErr, err)
 	configRepository.AssertExpectations(t)
 	fileSystem.AssertExpectations(t)
+	containerOrchestrator.AssertExpectations(t)
+}
+
+func TestShouldRebuildDevProxy_NoExistingDeployment(t *testing.T) {
+	configRepository := new(testutil.MockConfigRepository)
+	fileSystem := new(testutil.MockFileSystem)
+	containerImageRepository := new(testutil.MockContainerImageRepository)
+	containerOrchestrator := new(testutil.MockContainerOrchestrator)
+	configGenerator := ProvideDevProxyConfigGenerator()
+
+	configContext := createTestConfigContext()
+	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
+	containerOrchestrator.On("GetDevProxyChecksum").Return("", nil)
+
+	sut := ProvideDevProxyManager(configRepository, fileSystem, containerImageRepository, containerOrchestrator, configGenerator)
+
+	shouldRebuild, err := sut.ShouldRebuildDevProxy()
+
+	assert.NoError(t, err)
+	assert.True(t, shouldRebuild)
+	configRepository.AssertExpectations(t)
+	containerOrchestrator.AssertExpectations(t)
+}
+
+func TestShouldRebuildDevProxy_ChecksumChanged(t *testing.T) {
+	configRepository := new(testutil.MockConfigRepository)
+	fileSystem := new(testutil.MockFileSystem)
+	containerImageRepository := new(testutil.MockContainerImageRepository)
+	containerOrchestrator := new(testutil.MockContainerOrchestrator)
+	configGenerator := ProvideDevProxyConfigGenerator()
+
+	configContext := createTestConfigContext()
+	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
+	containerOrchestrator.On("GetDevProxyChecksum").Return("old-checksum-different-from-new", nil)
+
+	sut := ProvideDevProxyManager(configRepository, fileSystem, containerImageRepository, containerOrchestrator, configGenerator)
+
+	shouldRebuild, err := sut.ShouldRebuildDevProxy()
+
+	assert.NoError(t, err)
+	assert.True(t, shouldRebuild)
+	configRepository.AssertExpectations(t)
+	containerOrchestrator.AssertExpectations(t)
+}
+
+func TestShouldRebuildDevProxy_ChecksumUnchanged(t *testing.T) {
+	configRepository := new(testutil.MockConfigRepository)
+	fileSystem := new(testutil.MockFileSystem)
+	containerImageRepository := new(testutil.MockContainerImageRepository)
+	containerOrchestrator := new(testutil.MockContainerOrchestrator)
+	configGenerator := ProvideDevProxyConfigGenerator()
+
+	configContext := createTestConfigContext()
+	// Generate the expected checksum from the test config context
+	expectedChecksum := configGenerator.GenerateChecksum(configContext)
+
+	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
+	containerOrchestrator.On("GetDevProxyChecksum").Return(expectedChecksum, nil)
+
+	sut := ProvideDevProxyManager(configRepository, fileSystem, containerImageRepository, containerOrchestrator, configGenerator)
+
+	shouldRebuild, err := sut.ShouldRebuildDevProxy()
+
+	assert.NoError(t, err)
+	assert.False(t, shouldRebuild)
+	configRepository.AssertExpectations(t)
+	containerOrchestrator.AssertExpectations(t)
+}
+
+func TestShouldRebuildDevProxy_LoadConfigError(t *testing.T) {
+	configRepository := new(testutil.MockConfigRepository)
+	fileSystem := new(testutil.MockFileSystem)
+	containerImageRepository := new(testutil.MockContainerImageRepository)
+	containerOrchestrator := new(testutil.MockContainerOrchestrator)
+	configGenerator := ProvideDevProxyConfigGenerator()
+	expectedErr := errors.New("load config error")
+	configRepository.On("LoadCurrentConfigurationContext").Return(nil, expectedErr)
+
+	sut := ProvideDevProxyManager(configRepository, fileSystem, containerImageRepository, containerOrchestrator, configGenerator)
+
+	shouldRebuild, err := sut.ShouldRebuildDevProxy()
+
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, expectedErr)
+	assert.Contains(t, err.Error(), "failed to load configuration context")
+	assert.False(t, shouldRebuild)
+	configRepository.AssertExpectations(t)
+}
+
+func TestShouldRebuildDevProxy_GetChecksumError(t *testing.T) {
+	configRepository := new(testutil.MockConfigRepository)
+	fileSystem := new(testutil.MockFileSystem)
+	containerImageRepository := new(testutil.MockContainerImageRepository)
+	containerOrchestrator := new(testutil.MockContainerOrchestrator)
+	configGenerator := ProvideDevProxyConfigGenerator()
+
+	configContext := createTestConfigContext()
+	checksumErr := errors.New("kubernetes api error")
+
+	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
+	containerOrchestrator.On("GetDevProxyChecksum").Return("", checksumErr)
+
+	sut := ProvideDevProxyManager(configRepository, fileSystem, containerImageRepository, containerOrchestrator, configGenerator)
+
+	shouldRebuild, err := sut.ShouldRebuildDevProxy()
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get current dev-proxy checksum")
+	assert.False(t, shouldRebuild)
+	configRepository.AssertExpectations(t)
 	containerOrchestrator.AssertExpectations(t)
 }

@@ -68,6 +68,18 @@ dx context info
 3. Healthy? Traffic goes to your machine. Down? Falls back to the cluster pod
 4. All HTTP traffic is captured for inspection
 
+**When the dev-proxy is rebuilt:**
+
+1. It does not exist in the cluster yet
+2. Your `localServices` configuration has changed (services added, removed, or modified)
+
+Otherwise, `dx install` and `dx update` skip the rebuild. To skip dev-proxy entirely:
+
+```bash
+dx install --skip-dev-proxy
+dx update --skip-dev-proxy
+```
+
 ## Traffic Inspection
 
 DX includes a traffic inspector (powered by mitmproxy) that captures every request between services: headers, bodies, timing, and more. Filter by service, path, or status code.

@@ -14,6 +14,7 @@ import (
 	"dx/internal/core/domain"
 	"dx/internal/ports"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -300,6 +301,35 @@ func (k *Kubernetes) HasDeployedServices() (bool, error) {
 		return false, err
 	}
 	return len(releases) > 1, nil
+}
+
+// devProxyChecksumAnnotation is the annotation key used to store the dev-proxy configuration checksum.
+// This must match the annotation key used in the dev-proxy Helm template.
+const devProxyChecksumAnnotation = "checksum"
+
+// GetDevProxyChecksum returns the checksum annotation from the existing dev-proxy deployment.
+// Returns an empty string if the deployment doesn't exist.
+func (k *Kubernetes) GetDevProxyChecksum() (string, error) {
+	namespace := k.getCurrentNamespace()
+
+	deployment, err := k.clientSet.AppsV1().Deployments(namespace).Get(
+		context.Background(),
+		"dev-proxy",
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to get dev-proxy deployment: %w", err)
+	}
+
+	annotations := deployment.Spec.Template.ObjectMeta.Annotations
+	if annotations == nil {
+		return "", nil
+	}
+
+	return annotations[devProxyChecksumAnnotation], nil
 }
 
 // blockedHelmFlags contains flags that should not be allowed in user-provided helm args.

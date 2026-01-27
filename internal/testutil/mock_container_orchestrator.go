@@ -34,3 +34,8 @@ func (m *MockContainerOrchestrator) HasDeployedServices() (bool, error) {
 	args := m.Called()
 	return args.Bool(0), args.Error(1)
 }
+
+func (m *MockContainerOrchestrator) GetDevProxyChecksum() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}

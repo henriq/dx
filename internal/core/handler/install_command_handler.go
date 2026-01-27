@@ -63,10 +63,18 @@ func (h *InstallCommandHandler) Handle(services []string, selectedProfile string
 		servicesToInstall = append(servicesToInstall, service)
 	}
 
-	// Build unified service list with dev-proxy first if needed
-	hasDevProxy := !skipDevProxy
+	// Check if dev-proxy needs to be rebuilt before setting up the tracker
+	shouldRebuildDevProxy := false
+	if !skipDevProxy {
+		var err error
+		shouldRebuildDevProxy, err = h.devProxyManager.ShouldRebuildDevProxy()
+		if err != nil {
+			return err
+		}
+	}
+
 	totalItems := len(servicesToInstall)
-	if hasDevProxy {
+	if shouldRebuildDevProxy {
 		totalItems++
 	}
 
@@ -81,7 +89,7 @@ func (h *InstallCommandHandler) Handle(services []string, selectedProfile string
 	names := make([]string, 0, totalItems)
 	infos := make([]string, 0, totalItems)
 
-	if hasDevProxy {
+	if shouldRebuildDevProxy {
 		names = append(names, "dev-proxy")
 		infos = append(infos, "dx")
 	}
@@ -97,7 +105,7 @@ func (h *InstallCommandHandler) Handle(services []string, selectedProfile string
 	currentIndex := 0
 
 	// Install dev-proxy first if needed
-	if hasDevProxy {
+	if shouldRebuildDevProxy {
 		tracker.StartItem(currentIndex)
 
 		if err := h.devProxyManager.SaveConfiguration(); err != nil {

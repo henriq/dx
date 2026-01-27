@@ -10,4 +10,7 @@ type ContainerOrchestrator interface {
 	InstallDevProxy(service *domain.Service) error
 	UninstallService(service *domain.Service) error
 	HasDeployedServices() (bool, error)
+	// GetDevProxyChecksum returns the checksum annotation from the existing dev-proxy deployment.
+	// Returns an empty string if the deployment doesn't exist.
+	GetDevProxyChecksum() (string, error)
 }

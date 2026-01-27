@@ -55,6 +55,7 @@ func TestInstallCommandHandler_HandleInstallsAllServices(t *testing.T) {
 	containerImageRepository := new(testutil.MockContainerImageRepository)
 	containerImageRepository.On("BuildImage", mock.Anything).Return(nil)
 	configGenerator := core.ProvideDevProxyConfigGenerator()
+	containerOrchestrator.On("GetDevProxyChecksum").Return("", nil) // No existing deployment, will trigger rebuild
 	devProxyManager := core.ProvideDevProxyManager(
 		configRepository,
 		fileSystem,
@@ -126,6 +127,7 @@ func TestInstallCommandHandler_HandleInstallsOnlySelectedService(t *testing.T) {
 	containerImageRepository := new(testutil.MockContainerImageRepository)
 	containerImageRepository.On("BuildImage", mock.Anything).Return(nil)
 	configGenerator := core.ProvideDevProxyConfigGenerator()
+	containerOrchestrator.On("GetDevProxyChecksum").Return("", nil) // No existing deployment, will trigger rebuild
 	devProxyManager := core.ProvideDevProxyManager(
 		configRepository,
 		fileSystem,
@@ -157,4 +159,82 @@ func TestInstallCommandHandler_HandleInstallsOnlySelectedService(t *testing.T) {
 	containerOrchestrator.AssertNumberOfCalls(t, "InstallDevProxy", 1)
 	scm.AssertNumberOfCalls(t, "Download", 1)
 	scm.AssertExpectations(t)
+}
+
+func TestInstallCommandHandler_HandleSkipsDevProxyWhenChecksumUnchanged(t *testing.T) {
+	configContext := &domain.ConfigurationContext{
+		Name: "Test",
+		LocalServices: []domain.LocalService{
+			{
+				Name:            "test-service",
+				KubernetesPort:  8080,
+				LocalPort:       3000,
+				HealthCheckPath: "/health",
+			},
+		},
+		Services: []domain.Service{
+			{
+				Name:         "service-1",
+				HelmRepoPath: "any-repo-1",
+				HelmBranch:   "any-branch-1",
+				Profiles:     []string{"default"},
+			},
+		},
+	}
+	// Calculate the expected checksum for the LocalServices
+	configGenerator := core.ProvideDevProxyConfigGenerator()
+	expectedChecksum := configGenerator.GenerateChecksum(configContext)
+
+	configRepository := new(testutil.MockConfigRepository)
+	configRepository.On("LoadEnvKey", mock.Anything).Return("any-key", nil)
+	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
+	containerOrchestrator := new(testutil.MockContainerOrchestrator)
+	containerOrchestrator.On("CreateClusterEnvironmentKey").Return("any-key", nil)
+	containerOrchestrator.On("InstallService", mock.Anything).Return(nil)
+	// Return matching checksum - dev-proxy should be skipped
+	containerOrchestrator.On("GetDevProxyChecksum").Return(expectedChecksum, nil)
+	fileSystem := new(testutil.MockFileSystem)
+	// FileSystem WriteFile should NOT be called since dev-proxy is skipped
+	scm := new(testutil.MockScm)
+	scm.On(
+		"Download",
+		configContext.Services[0].HelmRepoPath,
+		configContext.Services[0].HelmBranch,
+		configContext.Services[0].HelmPath,
+	).Return(nil)
+	containerImageRepository := new(testutil.MockContainerImageRepository)
+	// BuildImage should NOT be called since dev-proxy is skipped
+
+	devProxyManager := core.ProvideDevProxyManager(
+		configRepository,
+		fileSystem,
+		containerImageRepository,
+		containerOrchestrator,
+		configGenerator,
+	)
+	environmentEnsurer := core.ProvideEnvironmentEnsurer(
+		configRepository,
+		containerOrchestrator,
+	)
+	sut := ProvideInstallCommandHandler(
+		configRepository,
+		containerImageRepository,
+		containerOrchestrator,
+		devProxyManager,
+		environmentEnsurer,
+		scm,
+	)
+
+	result := sut.Handle([]string{}, "default", false)
+
+	assert.Nil(t, result)
+	// Verify BuildImage was NOT called since dev-proxy checksum matched
+	containerImageRepository.AssertNumberOfCalls(t, "BuildImage", 0)
+	// Verify InstallDevProxy was NOT called
+	containerOrchestrator.AssertNumberOfCalls(t, "InstallDevProxy", 0)
+	// Verify WriteFile was NOT called for dev-proxy config
+	fileSystem.AssertNumberOfCalls(t, "WriteFile", 0)
+	// Verify user service was still installed
+	containerOrchestrator.AssertNumberOfCalls(t, "InstallService", 1)
+	scm.AssertNumberOfCalls(t, "Download", 1)
 }

@@ -80,6 +80,19 @@ func (g *DevProxyConfigGenerator) Generate(configContext *domain.ConfigurationCo
 	}, nil
 }
 
+// GenerateChecksum computes the configuration checksum for a given context.
+// This checksum is used to detect configuration changes for the dev-proxy deployment.
+// The checksum is a SHA256 hash of the LocalServices configuration, truncated to 62 characters
+// for readability and to ensure it fits within common annotation display widths.
+func (g *DevProxyConfigGenerator) GenerateChecksum(configContext *domain.ConfigurationContext) string {
+	hash := sha256.New()
+	// Error can be safely ignored: LocalServices contains only JSON-serializable primitive types
+	// (strings, ints, and map[string]string). json.Marshal cannot fail for these types.
+	serviceJSON, _ := json.Marshal(configContext.LocalServices)
+	hash.Write(serviceJSON)
+	return fmt.Sprintf("%x", hash.Sum(nil))[:62]
+}
+
 // buildTemplateValues constructs the values map for template rendering.
 func (g *DevProxyConfigGenerator) buildTemplateValues(configContext *domain.ConfigurationContext) map[string]interface{} {
 	frontendPort := devProxyFrontendStartPort
@@ -100,14 +113,7 @@ func (g *DevProxyConfigGenerator) buildTemplateValues(configContext *domain.Conf
 		proxyPort++
 	}
 
-	hash := sha256.New()
-	// Error can be safely ignored: LocalServices contains only JSON-serializable primitive types
-	// (strings, ints, and map[string]string). json.Marshal cannot fail for these types.
-	serviceJSON, _ := json.Marshal(configContext.LocalServices)
-	hash.Write(serviceJSON)
-	// Truncate to 62 characters to stay within Kubernetes label value limit (63 chars max).
-	// SHA256 produces 64 hex characters; this provides sufficient uniqueness for checksum purposes.
-	checksum := fmt.Sprintf("%x", hash.Sum(nil))[:62]
+	checksum := g.GenerateChecksum(configContext)
 
 	return map[string]interface{}{
 		"Services": services,

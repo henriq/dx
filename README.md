@@ -155,10 +155,35 @@ dx context print             # Output context as JSON
 Secrets are encrypted with AES-GCM. Encryption keys are stored in your system keyring (macOS Keychain, Windows Credential Manager, or Linux Secret Service).
 
 ```bash
-dx secret set DB_PASSWORD "s3cr3t"    # Store encrypted
+dx secret set DB_PASSWORD             # Set (prompts for value securely)
 dx secret get DB_PASSWORD             # Retrieve
 dx secret list                        # List all
 dx secret delete DB_PASSWORD          # Remove
+dx secret configure                   # Configure missing secrets interactively
+dx secret configure --check           # Validate all secrets are configured
+```
+
+#### Discovering Required Secrets
+
+DX can scan your configuration for secret references and prompt you for any missing values:
+
+```bash
+dx secret configure
+```
+
+This scans `{{.Secrets.KEY}}` references in:
+- Scripts (`scripts` section)
+- Helm arguments (`services[].helmArgs`)
+- Docker build arguments (`services[].dockerImages[].buildArgs`)
+
+Existing secrets are preserved. Press Enter to skip a secret during prompts.
+
+Use `--check` to validate without prompting:
+
+```bash
+dx secret configure --check
+# Exit code 0: all secrets configured
+# Exit code 1: missing secrets (lists them)
 ```
 
 ### Utilities
@@ -289,8 +314,8 @@ helmArgs:
 ```
 
 ```bash
-dx secret set DB_PASSWORD "s3cr3t"
-dx secret set API_KEY "key123"
+dx secret set DB_PASSWORD
+dx secret set API_KEY
 dx install api
 ```
 

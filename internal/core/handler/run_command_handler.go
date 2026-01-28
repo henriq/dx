@@ -2,7 +2,6 @@ package handler
 
 import (
 	"fmt"
-	"regexp"
 	"runtime"
 	"strings"
 
@@ -93,18 +92,15 @@ func (h *RunCommandHandler) Handle(scripts map[string]string, executionPlan []st
 }
 
 func findServiceDependencies(script string, existingServices []domain.Service) ([]domain.Service, error) {
-	serviceRegex := regexp.MustCompile(`{{[^}]*\.Services\s*\.*"*([\w\-_]+)[^}]*path`)
-	matches := serviceRegex.FindAllStringSubmatch(script, -1)
+	serviceRefs := core.ExtractServiceReferences(script)
 
 	services := make([]domain.Service, 0)
-	for _, match := range matches {
-		if len(match) > 1 {
-			service, err := findService(match[1], existingServices)
-			if err != nil {
-				return nil, err
-			}
-			services = append(services, service)
+	for _, ref := range serviceRefs {
+		service, err := findService(ref, existingServices)
+		if err != nil {
+			return nil, err
 		}
+		services = append(services, service)
 	}
 
 	return services, nil

@@ -13,6 +13,7 @@ import (
 	"dx/internal/adapters/scm"
 	"dx/internal/adapters/symmetric_encryptor"
 	"dx/internal/adapters/templater"
+	"dx/internal/adapters/terminal"
 	"dx/internal/core"
 	"dx/internal/core/handler"
 	"dx/internal/ports"
@@ -40,6 +41,8 @@ var Adapter = wire.NewSet(
 	symmetric_encryptor.ProvideAesGcmEncryptor,
 	wire.Bind(new(ports.SymmetricEncryptor), new(*symmetric_encryptor.AesGcmEncryptor)),
 	templater.ProvideTextTemplater,
+	terminal.ProvideTerminalInput,
+	wire.Bind(new(ports.TerminalInput), new(*terminal.TerminalInput)),
 )
 
 // CoreSet provides domain/core dependencies

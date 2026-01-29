@@ -7,7 +7,11 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+
+	"dx/internal/ports"
 )
+
+var _ ports.SymmetricEncryptor = (*AesGcmEncryptor)(nil)
 
 type AesGcmEncryptor struct{}
 

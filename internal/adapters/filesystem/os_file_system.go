@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+var _ ports.FileSystem = (*OsFileSystem)(nil)
+
 var ErrAccessDenied = errors.New("access denied: path must be within ~/.dx/ or be ~/.dx-config.yaml")
 
 type OsFileSystem struct{}

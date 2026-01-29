@@ -10,6 +10,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var _ ports.KustomizeClient = (*Client)(nil)
+
 // Kustomization represents a kustomization.yaml file.
 type Kustomization struct {
 	APIVersion string   `yaml:"apiVersion"`

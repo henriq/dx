@@ -6,6 +6,8 @@ import (
 	"dx/internal/ports"
 )
 
+var _ ports.Scm = (*Git)(nil)
+
 type Git struct {
 	gitClient  *GitClient
 	fileSystem ports.FileSystem

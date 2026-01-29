@@ -7,6 +7,8 @@ import (
 	"dx/internal/ports"
 )
 
+var _ ports.HelmClient = (*HelmClient)(nil)
+
 // HelmClient implements ports.HelmClient using the helm CLI.
 type HelmClient struct {
 	commandRunner ports.CommandRunner

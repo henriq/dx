@@ -1,8 +1,10 @@
 package terminal
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"strings"
 	"syscall"
 
 	"dx/internal/ports"
@@ -30,6 +32,17 @@ func (t *TerminalInput) ReadPassword(prompt string) (string, error) {
 		return "", fmt.Errorf("failed to read password: %w", err)
 	}
 	return string(password), nil
+}
+
+// ReadLine prompts the user and returns the input line.
+func (t *TerminalInput) ReadLine(prompt string) (string, error) {
+	fmt.Print(prompt)
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return "", fmt.Errorf("failed to read input: %w", err)
+	}
+	return strings.TrimSpace(line), nil
 }
 
 // IsTerminal returns true if stdin is connected to a terminal.

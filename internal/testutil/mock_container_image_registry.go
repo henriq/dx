@@ -2,9 +2,13 @@ package testutil
 
 import (
 	"dx/internal/core/domain"
+	"dx/internal/ports"
 
 	"github.com/stretchr/testify/mock"
 )
+
+// Compile-time interface compliance check
+var _ ports.ContainerImageRepository = (*MockContainerImageRepository)(nil)
 
 type MockContainerImageRepository struct {
 	mock.Mock

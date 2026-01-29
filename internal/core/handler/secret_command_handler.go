@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"dx/internal/cli/output"
 	"dx/internal/core"
@@ -52,7 +53,7 @@ func (h *SecretCommandHandler) HandleSet(key string) error {
 		return err
 	}
 
-	var secretExists = false
+	var secretExists bool
 	for i := range secrets {
 		if secrets[i].Key == key {
 			secrets[i].Value = value
@@ -61,12 +62,10 @@ func (h *SecretCommandHandler) HandleSet(key string) error {
 	}
 
 	if !secretExists {
-		secrets = append(
-			secrets, &domain.Secret{
-				Key:   key,
-				Value: value,
-			},
-		)
+		if conflicting, found := findConflictingSecretKey(secrets, key); found {
+			return fmt.Errorf("cannot set secret '%s': conflicts with existing secret '%s' (a secret key cannot have both a direct value and nested keys); delete '%s' first with 'dx secret delete %s'", key, conflicting, conflicting, conflicting)
+		}
+		secrets = append(secrets, &domain.Secret{Key: key, Value: value})
 	}
 
 	err = h.secretsRepository.SaveSecrets(secrets, configContextName)
@@ -229,6 +228,12 @@ func (h *SecretCommandHandler) HandleConfigure(checkOnly bool) error {
 			continue
 		}
 
+		if conflicting, found := findConflictingSecretKey(secrets, key); found {
+			fmt.Printf("  %s Skipping '%s': conflicts with existing secret '%s' (a secret key cannot have both a direct value and nested keys)\n", output.SymbolWarning, key, conflicting)
+			skipped++
+			continue
+		}
+
 		secrets = append(secrets, &domain.Secret{
 			Key:   key,
 			Value: value,
@@ -256,4 +261,17 @@ func (h *SecretCommandHandler) HandleConfigure(checkOnly bool) error {
 	}
 
 	return nil
+}
+
+func findConflictingSecretKey(secrets []*domain.Secret, newKey string) (string, bool) {
+	for _, secret := range secrets {
+		existing := secret.Key
+		if existing == newKey {
+			continue
+		}
+		if strings.HasPrefix(newKey, existing+".") || strings.HasPrefix(existing, newKey+".") {
+			return existing, true
+		}
+	}
+	return "", false
 }

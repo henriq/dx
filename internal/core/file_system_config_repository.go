@@ -107,7 +107,13 @@ func createSecretsMap(secrets []*domain.Secret) map[string]interface{} {
 				if currentMap[part] == nil {
 					currentMap[part] = make(map[string]interface{})
 				}
-				currentMap = currentMap[part].(map[string]interface{})
+				if nested, ok := currentMap[part].(map[string]interface{}); ok {
+					currentMap = nested
+				} else {
+					// Key conflict: a value already exists at this path but isn't a map.
+					// Skip this secret to avoid overwriting the existing value.
+					break
+				}
 			}
 		}
 	}

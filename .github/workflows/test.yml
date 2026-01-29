@@ -22,5 +22,14 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
+      - name: Generate code
+        run: go generate ./...
+
+      - name: Verify generated files are up to date
+        run: git diff --exit-code || (echo "Generated files are out of date. Run 'make generate' and commit the result." && exit 1)
+
+      - name: Vet
+        run: go vet ./...
+
       - name: Test
         run: go test ./...

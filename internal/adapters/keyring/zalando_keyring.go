@@ -7,6 +7,8 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
+var _ ports.Keyring = (*ZalandoKeyring)(nil)
+
 type ZalandoKeyring struct{}
 
 func ProvideZalandoKeyring() ports.Keyring {

@@ -20,6 +20,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+var _ ports.ContainerOrchestrator = (*Kubernetes)(nil)
+
 // Kubernetes represents a client for interacting with Kubernetes
 type Kubernetes struct {
 	configRepository  core.ConfigRepository

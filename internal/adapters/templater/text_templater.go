@@ -8,6 +8,8 @@ import (
 	"text/template"
 )
 
+var _ ports.Templater = (*TextTemplater)(nil)
+
 type TextTemplater struct{}
 
 func ProvideTextTemplater() ports.Templater {

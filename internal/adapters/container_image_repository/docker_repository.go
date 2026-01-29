@@ -10,6 +10,8 @@ import (
 	"dx/internal/ports"
 )
 
+var _ ports.ContainerImageRepository = (*DockerRepository)(nil)
+
 type DockerRepository struct {
 	configRepository  core.ConfigRepository
 	secretsRepository core.SecretsRepository

@@ -19,6 +19,11 @@ func (m *MockTerminalInput) ReadPassword(prompt string) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockTerminalInput) ReadLine(prompt string) (string, error) {
+	args := m.Called(prompt)
+	return args.String(0), args.Error(1)
+}
+
 func (m *MockTerminalInput) IsTerminal() bool {
 	args := m.Called()
 	return args.Bool(0)

@@ -199,6 +199,20 @@ func InjectGenerateCommandHandler() (handler.GenerateCommandHandler, error) {
 	return generateCommandHandler, nil
 }
 
+func InjectPullCommandHandler() (handler.PullCommandHandler, error) {
+	osFileSystem := filesystem.ProvideOsFileSystem()
+	portsKeyring := keyring.ProvideZalandoKeyring()
+	aesGcmEncryptor := symmetric_encryptor.ProvideAesGcmEncryptor()
+	secretsRepository := core.ProvideEncryptedFileSecretRepository(osFileSystem, portsKeyring, aesGcmEncryptor)
+	portsTemplater := templater.ProvideTextTemplater()
+	fileSystemConfigRepository := core.ProvideFileSystemConfigRepository(osFileSystem, secretsRepository, portsTemplater)
+	osCommandRunner := command_runner.ProvideOsCommandRunner()
+	dockerRepository := container_image_repository.ProvideDockerRepository(fileSystemConfigRepository, secretsRepository, portsTemplater, osCommandRunner)
+	terminalInput := terminal.ProvideTerminalInput()
+	pullCommandHandler := handler.ProvidePullCommandHandler(fileSystemConfigRepository, dockerRepository, terminalInput)
+	return pullCommandHandler, nil
+}
+
 // wire.go:
 
 var Adapter = wire.NewSet(command_runner.ProvideOsCommandRunner, wire.Bind(new(ports.CommandRunner), new(*command_runner.OsCommandRunner)), scm.ProvideGitClient, scm.ProvideGit, wire.Bind(new(ports.Scm), new(*scm.Git)), container_image_repository.ProvideDockerRepository, wire.Bind(new(ports.ContainerImageRepository), new(*container_image_repository.DockerRepository)), container_orchestrator.ProvideHelmClient, wire.Bind(new(ports.HelmClient), new(*container_orchestrator.HelmClient)), kustomize.ProvideKustomizeClient, wire.Bind(new(ports.KustomizeClient), new(*kustomize.Client)), container_orchestrator.ProvideKubernetes, wire.Bind(new(ports.ContainerOrchestrator), new(*container_orchestrator.Kubernetes)), filesystem.ProvideOsFileSystem, wire.Bind(new(ports.FileSystem), new(*filesystem.OsFileSystem)), keyring.ProvideZalandoKeyring, symmetric_encryptor.ProvideAesGcmEncryptor, wire.Bind(new(ports.SymmetricEncryptor), new(*symmetric_encryptor.AesGcmEncryptor)), templater.ProvideTextTemplater, terminal.ProvideTerminalInput, wire.Bind(new(ports.TerminalInput), new(*terminal.TerminalInput)))

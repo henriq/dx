@@ -6,28 +6,58 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var pullImages bool
+
 func init() {
 	rootCmd.AddCommand(updateCmd)
+	updateCmd.Flags().BoolVar(&pullImages, "pull", false, "pull images instead of building them")
 }
 
 var updateCmd = &cobra.Command{
 	Use:   "update [service...]",
-	Short: "Updates the application",
-	Long: `Builds and reinstalls the selected services if arguments are supplied,
-otherwise builds and reinstalls all services`,
+	Short: "Update services by building or pulling images and reinstalling",
+	Long: `Builds (or pulls with --pull) and reinstalls the selected services.
+If no services are specified, updates all services in the current profile.
+
+By default, images are built from source. Use --pull to pull pre-built images
+from the registry instead. Unlike 'dx pull', this skips the confirmation
+prompt since --pull is an explicit opt-in to overwrite locally-built images.`,
+	Example: `  # Build and reinstall all services in the default profile
+  dx update
+
+  # Update specific services
+  dx update api frontend
+
+  # Pull images instead of building, then reinstall
+  dx update --pull
+
+  # Pull and reinstall specific services
+  dx update --pull api frontend`,
 	Args:              ServiceArgsValidator,
 	ValidArgsFunction: ServiceArgsCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		buildHandler, err := app.InjectBuildCommandHandler()
-		if err != nil {
-			return err
-		}
-		installHandler, err := app.InjectInstallCommandHandler()
-		if err != nil {
-			return err
+		if pullImages {
+			pullHandler, err := app.InjectPullCommandHandler()
+			if err != nil {
+				return err
+			}
+			// skipConfirmation=true since update is an intentional action
+			err = pullHandler.Handle(args, *profile, true)
+			if err != nil {
+				return err
+			}
+		} else {
+			buildHandler, err := app.InjectBuildCommandHandler()
+			if err != nil {
+				return err
+			}
+			err = buildHandler.Handle(args, *profile)
+			if err != nil {
+				return err
+			}
 		}
 
-		err = buildHandler.Handle(args, *profile)
+		installHandler, err := app.InjectInstallCommandHandler()
 		if err != nil {
 			return err
 		}

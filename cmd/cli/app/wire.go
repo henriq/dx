@@ -159,3 +159,11 @@ func InjectGenerateCommandHandler() (handler.GenerateCommandHandler, error) {
 	)
 	return handler.GenerateCommandHandler{}, nil
 }
+
+func InjectPullCommandHandler() (handler.PullCommandHandler, error) {
+	wire.Build(
+		CommandHandlerSet,
+		handler.ProvidePullCommandHandler,
+	)
+	return handler.PullCommandHandler{}, nil
+}

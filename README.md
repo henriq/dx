@@ -103,7 +103,7 @@ Download the latest release from the [releases page](https://github.com/henriq/d
 
 - A local Kubernetes cluster (Docker Desktop, Rancher Desktop, minikube, kind)
 - Docker client connected to the cluster's Docker daemon
-- CLI tools: `kubectl`, `helm`, `git`, `docker`
+- CLI tools: `kubectl`, `helm`, `git`, `docker`, `bash`
 
 > **Note:** DX is designed for local development clusters where your Docker client can build images directly into the cluster. It is not intended for remote or production environments.
 
@@ -337,6 +337,8 @@ scripts:
 dx run reset-db
 dx run logs
 ```
+
+Scripts run in Bash and require `bash` to be available in your PATH.
 
 ### Dockerfile Override
 

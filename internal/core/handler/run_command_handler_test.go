@@ -117,6 +117,38 @@ func TestRunCommandHandler_Handle_LoadContextNameError(t *testing.T) {
 	configRepository.AssertExpectations(t)
 }
 
+func TestRunCommandHandler_Handle_LoadConfigContextError(t *testing.T) {
+	configRepository := new(testutil.MockConfigRepository)
+	secretsRepository := new(testutil.MockSecretsRepository)
+	templater := new(testutil.MockTemplater)
+	scm := new(testutil.MockScm)
+	commandRunner := new(testutil.MockCommandRunner)
+
+	configContext := &domain.ConfigurationContext{Name: "test-context"}
+	secrets := []*domain.Secret{}
+	expectedErr := errors.New("load config context error")
+
+	// First call (inside CreateTemplatingValues) succeeds
+	configRepository.On("LoadCurrentContextName").Return("test-context", nil)
+	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil).Once()
+	secretsRepository.On("LoadSecrets", "test-context").Return(secrets, nil)
+
+	// Second call (direct in Handle) fails
+	configRepository.On("LoadCurrentConfigurationContext").Return(nil, expectedErr).Once()
+
+	sut := ProvideRunCommandHandler(configRepository, secretsRepository, templater, scm, commandRunner)
+
+	scripts := map[string]string{"test-script": "echo hello"}
+	executionPlan := []string{"test-script"}
+
+	err := sut.Handle(scripts, executionPlan)
+
+	assert.Error(t, err)
+	assert.Equal(t, expectedErr, err)
+	configRepository.AssertExpectations(t)
+	secretsRepository.AssertExpectations(t)
+}
+
 func TestRunCommandHandler_Handle_LoadSecretsError(t *testing.T) {
 	configRepository := new(testutil.MockConfigRepository)
 	secretsRepository := new(testutil.MockSecretsRepository)
@@ -368,21 +400,9 @@ func TestRunCommandHandler_Handle_MultipleScripts(t *testing.T) {
 	commandRunner.AssertNumberOfCalls(t, "RunInteractive", 2)
 }
 
-func TestGetShellCommand_ReturnsCorrectShellForOS(t *testing.T) {
+func TestGetShellCommand_ReturnsBash(t *testing.T) {
 	shell, shellArg := getShellCommand()
 
-	// On the current OS (Linux in CI, potentially Windows locally),
-	// verify we get a valid shell configuration
-	assert.NotEmpty(t, shell, "shell should not be empty")
-	assert.NotEmpty(t, shellArg, "shellArg should not be empty")
-
-	// The function should return either bash/-c or cmd//c
-	validShells := map[string]string{
-		"bash": "-c",
-		"cmd":  "/c",
-	}
-
-	expectedArg, ok := validShells[shell]
-	assert.True(t, ok, "shell should be either 'bash' or 'cmd', got: %s", shell)
-	assert.Equal(t, expectedArg, shellArg, "shell argument mismatch for shell: %s", shell)
+	assert.Equal(t, "bash", shell)
+	assert.Equal(t, "-c", shellArg)
 }

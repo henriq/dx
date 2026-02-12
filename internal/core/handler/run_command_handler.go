@@ -2,7 +2,6 @@ package handler
 
 import (
 	"fmt"
-	"runtime"
 	"strings"
 
 	"dx/internal/cli/output"
@@ -59,7 +58,12 @@ func (h *RunCommandHandler) Handle(scripts map[string]string, executionPlan []st
 			for _, service := range dependentServices {
 				dependentServiceNames = append(dependentServiceNames, service.Name)
 			}
-			output.PrintStep(fmt.Sprintf("Updating repositories: %s", output.Dim(strings.Join(dependentServiceNames, ", "))))
+			output.PrintStep(
+				fmt.Sprintf(
+					"Updating repositories: %s",
+					output.Dim(strings.Join(dependentServiceNames, ", ")),
+				),
+			)
 		}
 
 		for _, dependentService := range dependentServices {
@@ -115,10 +119,6 @@ func findService(serviceName string, existingServices []domain.Service) (domain.
 	return domain.Service{}, fmt.Errorf("service '%s' not found", serviceName)
 }
 
-// getShellCommand returns the appropriate shell and argument for the current OS.
 func getShellCommand() (shell string, shellArg string) {
-	if runtime.GOOS == "windows" {
-		return "cmd", "/c"
-	}
 	return "bash", "-c"
 }

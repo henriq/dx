@@ -57,6 +57,32 @@ func TestCACommandHandler_HandlePrint_Success(t *testing.T) {
 	mockCA.AssertExpectations(t)
 }
 
+// Under `go test`, stdout is a pipe, so this asserts the piped-output
+// contract: PEM is emitted verbatim with its own trailing newline preserved.
+func TestCACommandHandler_HandlePrint_PreservesPEMTrailingNewlineWhenPiped(t *testing.T) {
+	configRepository := new(testutil.MockConfigRepository)
+	configRepository.On("LoadCurrentContextName").Return("test-ctx", nil)
+
+	pem := "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n"
+	mockCA := new(testutil.MockCertificateAuthority)
+	mockCA.On("GetCACertificatePEM", "test-ctx").Return([]byte(pem), nil)
+
+	sut := NewCACommandHandler(
+		configRepository,
+		mockCA,
+		noCertProvisioner(),
+		new(testutil.MockTerminalInput),
+		core.NewEnvironmentEnsurer(configRepository, new(testutil.MockContainerOrchestrator)),
+	)
+
+	captured := testutil.CaptureStdout(t, func() {
+		err := sut.HandlePrint()
+		assert.NoError(t, err)
+	})
+
+	assert.Equal(t, pem, captured)
+}
+
 func TestCACommandHandler_HandlePrint_NoCA(t *testing.T) {
 	configRepository := new(testutil.MockConfigRepository)
 	configRepository.On("LoadCurrentContextName").Return("test-ctx", nil)

@@ -350,6 +350,48 @@ func TestSecretCommandHandler_HandleGet_Success(t *testing.T) {
 	secretsRepository.AssertExpectations(t)
 }
 
+// Under `go test`, stdout is a pipe, so these assert the piped-output contract
+// (no newline appended to values that do not already end with one).
+func TestSecretCommandHandler_HandleGet_PrintsValueWithoutTrailingNewlineWhenPiped(t *testing.T) {
+	secretsRepository := new(testutil.MockSecretsRepository)
+	configRepository := new(testutil.MockConfigRepository)
+	terminalInput := new(testutil.MockTerminalInput)
+
+	configRepository.On("LoadCurrentContextName").Return("test-context", nil)
+	secretsRepository.On("LoadSecrets", "test-context").Return(
+		[]*domain.Secret{{Key: "DB_PASSWORD", Value: "secret123"}}, nil,
+	)
+
+	sut := NewSecretCommandHandler(secretsRepository, configRepository, terminalInput)
+
+	captured := testutil.CaptureStdout(t, func() {
+		err := sut.HandleGet("DB_PASSWORD")
+		assert.NoError(t, err)
+	})
+
+	assert.Equal(t, "secret123", captured)
+}
+
+func TestSecretCommandHandler_HandleGet_PreservesInternalNewlinesInValue(t *testing.T) {
+	secretsRepository := new(testutil.MockSecretsRepository)
+	configRepository := new(testutil.MockConfigRepository)
+	terminalInput := new(testutil.MockTerminalInput)
+
+	configRepository.On("LoadCurrentContextName").Return("test-context", nil)
+	secretsRepository.On("LoadSecrets", "test-context").Return(
+		[]*domain.Secret{{Key: "MULTILINE", Value: "line1\nline2"}}, nil,
+	)
+
+	sut := NewSecretCommandHandler(secretsRepository, configRepository, terminalInput)
+
+	captured := testutil.CaptureStdout(t, func() {
+		err := sut.HandleGet("MULTILINE")
+		assert.NoError(t, err)
+	})
+
+	assert.Equal(t, "line1\nline2", captured)
+}
+
 func TestSecretCommandHandler_HandleGet_NotFound(t *testing.T) {
 	secretsRepository := new(testutil.MockSecretsRepository)
 	configRepository := new(testutil.MockConfigRepository)

@@ -70,7 +70,10 @@ var secretGetCmd = &cobra.Command{
   pilot secret get DB_PASSWORD
 
   # Use in a shell script
-  export DB_PASSWORD=$(pilot secret get DB_PASSWORD)`,
+  export DB_PASSWORD=$(pilot secret get DB_PASSWORD)
+
+  # Pipe to the clipboard
+  pilot secret get DB_PASSWORD | pbcopy`,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: SecretKeysCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {

@@ -50,7 +50,7 @@ func (h *CACommandHandler) HandlePrint() error {
 		)
 	}
 
-	fmt.Print(string(certPEM))
+	output.PrintPipeable(string(certPEM))
 	return nil
 }
 

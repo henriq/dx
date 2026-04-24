@@ -66,7 +66,10 @@ Use this to add the CA to your system trust store or browser for local developme
   pilot ca print
 
   # Save to a file
-  pilot ca print > ca.crt`,
+  pilot ca print > ca.crt
+
+  # Pipe to a trust-store installer
+  pilot ca print | sudo tee /usr/local/share/ca-certificates/pilot-dev.crt`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		handler, err := app.InjectCACommandHandler()
 		if err != nil {

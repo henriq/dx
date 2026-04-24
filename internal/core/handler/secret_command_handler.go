@@ -119,7 +119,7 @@ func (h *SecretCommandHandler) HandleGet(key string) error {
 
 	for _, secret := range secrets {
 		if secret.Key == key {
-			fmt.Println(secret.Value)
+			output.PrintPipeable(secret.Value)
 			return nil
 		}
 	}

@@ -3,9 +3,16 @@ package output
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"golang.org/x/term"
 )
+
+// IsStdoutTerminal reports whether stdout is connected to a terminal
+// (as opposed to a pipe or file redirect).
+func IsStdoutTerminal() bool {
+	return term.IsTerminal(int(os.Stdout.Fd())) //nolint:gosec // safe fd conversion
+}
 
 // ColorsEnabled returns true if terminal colors should be used.
 // Respects NO_COLOR environment variable (https://no-color.org/)
@@ -14,7 +21,7 @@ func ColorsEnabled() bool {
 	if noColor {
 		return false
 	}
-	return term.IsTerminal(int(os.Stdout.Fd())) //nolint:gosec // safe fd conversion
+	return IsStdoutTerminal()
 }
 
 // ANSI color codes
@@ -192,6 +199,16 @@ func PrintBulletField(name string, value string) {
 // PrintSubfield prints a deeply-indented key-value pair, used for detail lines under a bullet.
 func PrintSubfield(label string, value string) {
 	fmt.Printf("      %-7s%s\n", label, value)
+}
+
+// PrintPipeable writes value verbatim to stdout, appending a newline only
+// when stdout is a TTY and value does not already end with one.
+func PrintPipeable(value string) {
+	if IsStdoutTerminal() && !strings.HasSuffix(value, "\n") {
+		fmt.Println(value)
+	} else {
+		fmt.Print(value)
+	}
 }
 
 // Plural returns the singular or plural form based on count

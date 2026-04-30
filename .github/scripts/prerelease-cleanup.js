@@ -54,7 +54,7 @@ module.exports = async ({ github, context, core, dryRun = true }) => {
       }
 
       try {
-        await github.rest.git.deleteRef({ owner, repo, ref: `tags/${release.tag_name}` });
+        await github.rest.git.deleteRef({ owner, repo, ref: `tags/${encodeURIComponent(release.tag_name)}` });
         console.log(`Deleted tag: ${release.tag_name}`);
       } catch (e) {
         if (isBenign(e)) {

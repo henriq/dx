@@ -300,6 +300,31 @@ func TestMergeConfigurationContexts(t *testing.T) {
 	assert.Len(t, result.LocalServices, 2)
 }
 
+func TestMergeConfigurationContexts_MinPilotVersionTakesHigher(t *testing.T) {
+	tests := []struct {
+		name     string
+		base     string
+		overlay  string
+		expected string
+	}{
+		{name: "both empty", expected: ""},
+		{name: "base only", base: "v1.2.3", expected: "v1.2.3"},
+		{name: "overlay only", overlay: "v1.2.3", expected: "v1.2.3"},
+		{name: "overlay higher", base: "v1.2.3", overlay: "v2.0.0", expected: "v2.0.0"},
+		{name: "base higher", base: "v2.0.0", overlay: "v1.2.3", expected: "v2.0.0"},
+		{name: "equal", base: "v1.2.3", overlay: "v1.2.3", expected: "v1.2.3"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			base := domain.ConfigurationContext{Name: "ctx", MinPilotVersion: tt.base}
+			overlay := domain.ConfigurationContext{Name: "ctx", MinPilotVersion: tt.overlay}
+			result := mergeConfigurationContexts(base, overlay)
+			assert.Equal(t, tt.expected, result.MinPilotVersion)
+		})
+	}
+}
+
 func TestOverlayService(t *testing.T) {
 	base := domain.Service{
 		Name:        "base-svc",

@@ -151,3 +151,8 @@ func InjectCacheCommandHandler() (handler.CacheCommandHandler, error) {
 	wire.Build(CommandHandlerSet, handler.NewCacheCommandHandler)
 	return handler.CacheCommandHandler{}, nil
 }
+
+func InjectVersionCheckCommandHandler() (handler.VersionCheckCommandHandler, error) {
+	wire.Build(CommandHandlerSet, handler.NewVersionCheckCommandHandler)
+	return handler.VersionCheckCommandHandler{}, nil
+}

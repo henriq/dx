@@ -4,14 +4,17 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"golang.org/x/mod/semver"
 )
 
 type ConfigurationContext struct {
-	Name          string            `yaml:"name"`
-	Scripts       map[string]string `yaml:"scripts"`
-	Import        *string           `yaml:"import,omitempty"`
-	Services      []Service         `yaml:"services"`
-	LocalServices []LocalService    `yaml:"localServices,omitempty"`
+	Name            string            `yaml:"name"`
+	MinPilotVersion string            `yaml:"minPilotVersion,omitempty"`
+	Scripts         map[string]string `yaml:"scripts"`
+	Import          *string           `yaml:"import,omitempty"`
+	Services        []Service         `yaml:"services"`
+	LocalServices   []LocalService    `yaml:"localServices,omitempty"`
 }
 
 // Service represents a deployable service with its Docker configuration
@@ -54,7 +57,8 @@ type LocalService struct {
 
 // Config holds the application configuration including available services
 type Config struct {
-	Contexts []ConfigurationContext `yaml:"contexts"`
+	MinPilotVersion string                 `yaml:"minPilotVersion,omitempty"`
+	Contexts        []ConfigurationContext `yaml:"contexts"`
 }
 
 func CreateDefaultConfig() Config {
@@ -141,6 +145,46 @@ func (c *ConfigurationContext) GetService(name string) *Service {
 	return nil
 }
 
+// NormalizePilotVersion returns the version with a leading "v" so it parses as semver.
+func NormalizePilotVersion(version string) string {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return ""
+	}
+	if !strings.HasPrefix(version, "v") {
+		return "v" + version
+	}
+	return version
+}
+
+// IsValidPilotVersion reports whether the given string is valid semver, with or without a leading "v".
+func IsValidPilotVersion(version string) bool {
+	return semver.IsValid(NormalizePilotVersion(version))
+}
+
+// HigherPilotVersion returns whichever of a and b sorts higher in semver order; an empty value loses to any non-empty value.
+func HigherPilotVersion(a, b string) string {
+	if a == "" {
+		return b
+	}
+	if b == "" {
+		return a
+	}
+	if semver.Compare(NormalizePilotVersion(a), NormalizePilotVersion(b)) >= 0 {
+		return a
+	}
+	return b
+}
+
+// EffectiveMinPilotVersion returns the highest minimum-version requirement declared across the root config and every context, or "" when none is set.
+func (c *Config) EffectiveMinPilotVersion() string {
+	highest := c.MinPilotVersion
+	for _, ctx := range c.Contexts {
+		highest = HigherPilotVersion(highest, ctx.MinPilotVersion)
+	}
+	return highest
+}
+
 // ValidateContextName checks that a context name doesn't contain path traversal characters.
 func ValidateContextName(name string) error {
 	if name == "" {
@@ -156,12 +200,19 @@ func ValidateContextName(name string) error {
 }
 
 func (c *Config) Validate() error {
+	if c.MinPilotVersion != "" && !IsValidPilotVersion(c.MinPilotVersion) {
+		return fmt.Errorf("minPilotVersion %q is not valid semver", c.MinPilotVersion)
+	}
+
 	for i, ctx := range c.Contexts {
 		if ctx.Name == "" {
 			return fmt.Errorf("context at index %d has empty name", i)
 		}
 		if err := ValidateContextName(ctx.Name); err != nil {
 			return fmt.Errorf("context '%s': %w", ctx.Name, err)
+		}
+		if ctx.MinPilotVersion != "" && !IsValidPilotVersion(ctx.MinPilotVersion) {
+			return fmt.Errorf("context %q: minPilotVersion %q is not valid semver", ctx.Name, ctx.MinPilotVersion)
 		}
 
 		for j, svc := range ctx.Services {

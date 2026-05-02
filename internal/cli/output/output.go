@@ -130,6 +130,11 @@ func PrintWarning(message string) {
 	fmt.Fprintf(os.Stderr, "%s %s\n", Warning(SymbolWarning), Warning(message))
 }
 
+// PrintWarningCritical prints a warning to stderr in red, for advisories that need to stand out from ordinary yellow warnings.
+func PrintWarningCritical(message string) {
+	fmt.Fprintf(os.Stderr, "%s %s\n", Error(SymbolWarning), Error(message))
+}
+
 // PrintWarningNewline prints a blank line to stderr for visual spacing in warning/confirmation blocks.
 func PrintWarningNewline() {
 	fmt.Fprintln(os.Stderr)

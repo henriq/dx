@@ -173,3 +173,156 @@ func TestConfig_Validate_ContextNamePathTraversal(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizePilotVersion(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"v1.2.3", "v1.2.3"},
+		{"1.2.3", "v1.2.3"},
+		{"  1.2.3  ", "v1.2.3"},
+		{"", ""},
+		{"v0.0.0-prerelease+abc", "v0.0.0-prerelease+abc"},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.expected, NormalizePilotVersion(tt.input), tt.input)
+	}
+}
+
+func TestIsValidPilotVersion(t *testing.T) {
+	assert.True(t, IsValidPilotVersion("v1.2.3"))
+	assert.True(t, IsValidPilotVersion("1.2.3"))
+	assert.True(t, IsValidPilotVersion("v1.2.3-prerelease+abc"))
+	assert.False(t, IsValidPilotVersion("dev"))
+	assert.False(t, IsValidPilotVersion("not-a-version"))
+	assert.False(t, IsValidPilotVersion(""))
+}
+
+func TestHigherPilotVersion(t *testing.T) {
+	tests := []struct {
+		a, b, expected string
+	}{
+		{"", "", ""},
+		{"v1.2.3", "", "v1.2.3"},
+		{"", "v1.2.3", "v1.2.3"},
+		{"v1.2.3", "v1.2.4", "v1.2.4"},
+		{"v2.0.0", "v1.9.9", "v2.0.0"},
+		{"1.2.3", "v1.2.4", "v1.2.4"},
+		{"v1.2.3", "v1.2.3", "v1.2.3"},
+		{"v1.2.3-prerelease", "v1.2.3", "v1.2.3"},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.expected, HigherPilotVersion(tt.a, tt.b), "a=%s b=%s", tt.a, tt.b)
+	}
+}
+
+func TestConfig_EffectiveMinPilotVersion(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   Config
+		expected string
+	}{
+		{
+			name:     "all empty",
+			config:   Config{Contexts: []ConfigurationContext{{Name: "a"}, {Name: "b"}}},
+			expected: "",
+		},
+		{
+			name: "root only",
+			config: Config{
+				MinPilotVersion: "v1.2.3",
+				Contexts:        []ConfigurationContext{{Name: "a"}},
+			},
+			expected: "v1.2.3",
+		},
+		{
+			name: "context only",
+			config: Config{
+				Contexts: []ConfigurationContext{{Name: "a", MinPilotVersion: "v1.5.0"}},
+			},
+			expected: "v1.5.0",
+		},
+		{
+			name: "context wins over root",
+			config: Config{
+				MinPilotVersion: "v1.0.0",
+				Contexts: []ConfigurationContext{
+					{Name: "a", MinPilotVersion: "v0.9.0"},
+					{Name: "b", MinPilotVersion: "v2.0.0"},
+				},
+			},
+			expected: "v2.0.0",
+		},
+		{
+			name: "root wins over contexts",
+			config: Config{
+				MinPilotVersion: "v3.0.0",
+				Contexts: []ConfigurationContext{
+					{Name: "a", MinPilotVersion: "v1.5.0"},
+					{Name: "b", MinPilotVersion: "v2.0.0"},
+				},
+			},
+			expected: "v3.0.0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.config.EffectiveMinPilotVersion())
+		})
+	}
+}
+
+func TestConfig_Validate_MinPilotVersion(t *testing.T) {
+	baseService := Service{
+		Name:                  "test-svc",
+		HelmRepoPath:          "/tmp/helm",
+		HelmBranch:            "main",
+		HelmChartRelativePath: "charts",
+		DockerImages: []DockerImage{
+			{
+				Name:                     "test-img",
+				DockerfilePath:           "Dockerfile",
+				BuildContextRelativePath: ".",
+				GitRepoPath:              "/tmp/repo",
+				GitRef:                   "main",
+			},
+		},
+	}
+
+	tests := []struct {
+		name           string
+		rootMinVersion string
+		ctxMinVersion  string
+		wantErr        bool
+	}{
+		{name: "both empty", wantErr: false},
+		{name: "root valid", rootMinVersion: "v1.2.3", wantErr: false},
+		{name: "root valid no prefix", rootMinVersion: "1.2.3", wantErr: false},
+		{name: "ctx valid", ctxMinVersion: "v1.2.3", wantErr: false},
+		{name: "root invalid", rootMinVersion: "not-a-version", wantErr: true},
+		{name: "ctx invalid", ctxMinVersion: "1..2.3", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := Config{
+				MinPilotVersion: tt.rootMinVersion,
+				Contexts: []ConfigurationContext{
+					{
+						Name:            "ctx",
+						MinPilotVersion: tt.ctxMinVersion,
+						Services:        []Service{baseService},
+					},
+				},
+			}
+			err := config.Validate()
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

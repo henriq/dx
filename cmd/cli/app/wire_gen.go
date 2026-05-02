@@ -257,6 +257,17 @@ func InjectCacheCommandHandler() (handler.CacheCommandHandler, error) {
 	return cacheCommandHandler, nil
 }
 
+func InjectVersionCheckCommandHandler() (handler.VersionCheckCommandHandler, error) {
+	osFileSystem := ProvideFileSystem()
+	zalandoKeyring := ProvideKeyring()
+	aesGcmEncryptor := ProvideEncryptor()
+	encryptedFileSecretRepository := ProvideSecretRepository(osFileSystem, zalandoKeyring, aesGcmEncryptor)
+	textTemplater := ProvideTemplater()
+	fileSystemConfigRepository := ProvideConfigRepository(osFileSystem, encryptedFileSecretRepository, textTemplater)
+	versionCheckCommandHandler := handler.NewVersionCheckCommandHandler(fileSystemConfigRepository)
+	return versionCheckCommandHandler, nil
+}
+
 // wire.go:
 
 // AdapterSet wires adapter providers (from providers.go) to port interfaces.

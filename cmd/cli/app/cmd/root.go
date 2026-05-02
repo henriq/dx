@@ -45,6 +45,9 @@ Common workflows:
 				}
 			}
 		}
+		if !skipVersionCheck(cmd) {
+			warnIfVersionTooOld()
+		}
 		return nil
 	},
 }
@@ -60,6 +63,28 @@ func skipMigration(cmd *cobra.Command) bool {
 		}
 	}
 	return false
+}
+
+var versionCheckSkipCommands = map[string]struct{}{
+	"completion": {}, // shell-eval'd by package managers; stderr noise pollutes new shells
+	"version":    {}, // already prints the running version, so a "you're old" line above it is redundant
+}
+
+func skipVersionCheck(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if _, ok := versionCheckSkipCommands[c.Name()]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func warnIfVersionTooOld() {
+	versionCheck, err := app.InjectVersionCheckCommandHandler()
+	if err != nil {
+		return
+	}
+	versionCheck.Handle(version)
 }
 
 func Execute() {

@@ -237,16 +237,16 @@ func TestExtractServiceReferences_NoServices(t *testing.T) {
 	assert.Empty(t, refs)
 }
 
-func TestExtractServiceReferences_QuotedServiceName(t *testing.T) {
-	template := `cd {{.Services."my-service".path}} && make build`
+func TestExtractServiceReferences_HyphenatedServiceName(t *testing.T) {
+	template := `cd {{ (index .Services "my-service").path }} && make build`
 
 	refs := ExtractServiceReferences(template)
 
 	assert.Equal(t, []string{"my-service"}, refs)
 }
 
-func TestExtractTemplateVariables_QuotedKey(t *testing.T) {
-	template := `{{.Services."my-service".path}}`
+func TestExtractTemplateVariables_HyphenatedKey(t *testing.T) {
+	template := `{{ (index .Services "my-service").path }}`
 
 	result := ExtractTemplateVariables(template)
 
@@ -362,41 +362,34 @@ func TestExtractServiceReferences_IndexFunction(t *testing.T) {
 
 // Pipeline syntax
 func TestExtractTemplateVariables_WithPipeline(t *testing.T) {
-	template := `{{ .Secrets.KEY | quote }}`
+	template := `{{ .Secrets.KEY | print }}`
 	result := ExtractTemplateVariables(template)
 	assert.Equal(t, []string{"KEY"}, result["Secrets"])
 }
 
 func TestExtractTemplateVariables_WithMultiplePipelines(t *testing.T) {
-	template := `{{ .Secrets.DB_PASSWORD | default "secret" | quote }}`
+	template := `{{ .Secrets.DB_PASSWORD | printf "%s" | print }}`
 	result := ExtractTemplateVariables(template)
 	assert.Equal(t, []string{"DB_PASSWORD"}, result["Secrets"])
 }
 
 func TestExtractTemplateVariables_ServiceWithPipeline(t *testing.T) {
-	template := `{{ .Services.api.path | quote }}`
+	template := `{{ .Services.api.path | print }}`
 	result := ExtractTemplateVariables(template)
 	assert.Equal(t, []string{"api"}, result["Services"])
 }
 
-// Trim markers without space
-func TestExtractTemplateVariables_TrimMarkerNoSpace(t *testing.T) {
-	template := `{{.Secrets.KEY-}}`
+// Trim markers
+func TestExtractTemplateVariables_TrailingTrimMarker(t *testing.T) {
+	template := `{{.Secrets.KEY -}}`
 	result := ExtractTemplateVariables(template)
 	assert.Equal(t, []string{"KEY"}, result["Secrets"])
 }
 
-func TestExtractTemplateVariables_BothTrimMarkersNoSpace(t *testing.T) {
-	template := `{{-.Secrets.KEY-}}`
+func TestExtractTemplateVariables_BothTrimMarkers(t *testing.T) {
+	template := `{{- .Secrets.KEY -}}`
 	result := ExtractTemplateVariables(template)
 	assert.Equal(t, []string{"KEY"}, result["Secrets"])
-}
-
-// Index function with single quotes
-func TestExtractTemplateVariables_IndexFunctionSingleQuotes(t *testing.T) {
-	template := `{{ (index .Services 'my-service').path }}`
-	result := ExtractTemplateVariables(template)
-	assert.Equal(t, []string{"my-service"}, result["Services"])
 }
 
 // Index function with backticks
@@ -423,4 +416,89 @@ func TestExtractTemplateVariables_SortedServices(t *testing.T) {
 	template := `{{.Services.zebra.path}} {{.Services.alpha.path}} {{.Services.mike.path}}`
 	result := ExtractTemplateVariables(template)
 	assert.Equal(t, []string{"alpha", "mike", "zebra"}, result["Services"])
+}
+
+func TestReferencesAllServices(t *testing.T) {
+	tests := []struct {
+		name     string
+		template string
+		want     bool
+	}{
+		{"range over services with vars", `{{ range $name, $service := .Services }}{{ $name }}{{ end }}`, true},
+		{"range without vars", `{{ range .Services }}x{{ end }}`, true},
+		{"with block", `{{ with .Services }}{{ len . }}{{ end }}`, true},
+		{"len call", `{{ if eq (len .Services) 0 }}empty{{ end }}`, true},
+		{"plain reference", `{{ .Services }}`, true},
+		{"specific service via dot", `cd {{ .Services.api.path }} && make build`, false},
+		{"index function", `cd {{ (index .Services "my-service").path }} && make build`, false},
+		{"longer identifier", `{{ .ServicesList }}`, false},
+		{"no template", `echo hello`, false},
+		{"mixed root and index", `{{ range .Services }}{{ end }}{{ (index .Services "x").path }}`, true},
+		{"only index references", `{{ (index .Services "a").path }} {{ (index .Services "b").path }}`, false},
+		{"empty string", ``, false},
+		{"multi-line range", "echo before\n{{ range $name, $service := .Services }}\n{{ $name }}\n{{ end }}", true},
+		{"trim markers", `{{- .Services -}}`, true},
+		{"assignment to variable", `{{ $svc := .Services }}{{ range $svc }}x{{ end }}`, true},
+		{"if pipeline", `{{ if .Services }}has services{{ end }}`, true},
+		{"services-map prefix", `{{ .ServicesMap.foo }}`, false},
+		{"inside template comment", `{{/* placeholder for .Services iteration */}}`, false},
+		{"dollar root scope", `{{ range .Services }}{{ $.Services }}{{ end }}`, true},
+		{"template invocation", `{{ template "x" .Services }}`, true},
+		{"chained access on parenthesized root", `{{ (.Services).foo }}`, true},
+		{"pipeline into len", `{{ .Services | len }}`, true},
+		{"index with dynamic key", `{{ (index .Services .Key) }}`, true},
+		{"multi-arg index with string keys", `{{ index .Services "a" "nested" }}`, false},
+		{"malformed template", `{{ .Services`, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, ReferencesAllServices(tt.template))
+		})
+	}
+}
+
+func TestExtractTemplateVariables_MalformedTemplate(t *testing.T) {
+	template := `{{ .Services`
+	assert.Empty(t, ExtractTemplateVariables(template))
+}
+
+func TestExtractServiceReferences_MalformedTemplate(t *testing.T) {
+	template := `{{ .Services`
+	assert.Empty(t, ExtractServiceReferences(template))
+}
+
+func TestExtractServiceReferences_QuotedDotKey_NoLongerSupported(t *testing.T) {
+	template := `{{ .Services."my-service".path }}`
+	assert.Empty(t, ExtractServiceReferences(template))
+}
+
+func TestExtractServiceReferences_BareIndexCall(t *testing.T) {
+	template := `{{ index .Services "my-service" }}`
+	assert.Equal(t, []string{"my-service"}, ExtractServiceReferences(template))
+	assert.False(t, ReferencesAllServices(template))
+}
+
+func TestExtractServiceReferences_BareIndexCallWithPipeline(t *testing.T) {
+	template := `{{ index .Services "my-service" | print }}`
+	assert.Equal(t, []string{"my-service"}, ExtractServiceReferences(template))
+	assert.False(t, ReferencesAllServices(template))
+}
+
+func TestExtractTemplateVariables_IndexFunctionDottedSecretKey(t *testing.T) {
+	template := `{{ (index .Secrets "db.password") }}`
+	result := ExtractTemplateVariables(template)
+	assert.Equal(t, []string{"db.password"}, result["Secrets"])
+}
+
+func TestExtractServiceReferences_MultiArgIndex(t *testing.T) {
+	template := `{{ index .Services "a" "nested" }}`
+	assert.Equal(t, []string{"a"}, ExtractServiceReferences(template))
+	assert.False(t, ReferencesAllServices(template))
+}
+
+func TestReferencesAllServices_RangeBodyFieldAccess(t *testing.T) {
+	template := `{{ range .Services }}{{ .gitRef }}{{ end }}`
+	assert.True(t, ReferencesAllServices(template))
+	assert.Empty(t, ExtractServiceReferences(template))
 }

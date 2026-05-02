@@ -39,12 +39,12 @@ func TestGitClient_ContainsRepository_False(t *testing.T) {
 func TestGitClient_UpdateOriginUrl_Success(t *testing.T) {
 	commandRunner := new(testutil.MockCommandRunner)
 	fileSystem := new(testutil.MockFileSystem)
-	commandRunner.On("RunInDir", "/repo", "git", []string{"remote", "set-url", "origin", "https://github.com/user/repo.git"}).
+	commandRunner.On("RunInDir", "/repo", "git", []string{"remote", "set-url", "origin", "https://example.com/user/repo.git"}).
 		Return([]byte(""), nil)
 
 	client := NewGitClient(commandRunner, fileSystem)
 
-	err := client.UpdateOriginUrl("/repo", "https://github.com/user/repo.git")
+	err := client.UpdateOriginUrl("/repo", "https://example.com/user/repo.git")
 
 	require.NoError(t, err)
 	commandRunner.AssertExpectations(t)
@@ -69,7 +69,7 @@ func TestGitClient_FetchRefFromOrigin_Success(t *testing.T) {
 	commandRunner := new(testutil.MockCommandRunner)
 	fileSystem := new(testutil.MockFileSystem)
 	commandRunner.On("RunWithEnvInDir", "/repo", sshBatchModeEnv, "git", []string{"-c", "core.autocrlf=false", "fetch", "origin", "-f", "main"}).
-		Return([]byte("From https://github.com/user/repo\n * branch main -> FETCH_HEAD"), nil)
+		Return([]byte("From https://example.com/user/repo\n * branch main -> FETCH_HEAD"), nil)
 
 	client := NewGitClient(commandRunner, fileSystem)
 
@@ -248,12 +248,12 @@ func TestGitClient_ResetToCommit_Error(t *testing.T) {
 func TestGitClient_Download_Success(t *testing.T) {
 	commandRunner := new(testutil.MockCommandRunner)
 	fileSystem := new(testutil.MockFileSystem)
-	commandRunner.On("RunWithEnv", "git", sshBatchModeEnv, []string{"clone", "-c", "core.autocrlf=false", "https://github.com/user/repo.git", "--branch", "main", "/path/to/dest"}).
+	commandRunner.On("RunWithEnv", "git", sshBatchModeEnv, []string{"clone", "-c", "core.autocrlf=false", "https://example.com/user/repo.git", "--branch", "main", "/path/to/dest"}).
 		Return([]byte("Cloning into '/path/to/dest'..."), nil)
 
 	client := NewGitClient(commandRunner, fileSystem)
 
-	err := client.Download("/path/to/dest", "main", "https://github.com/user/repo.git")
+	err := client.Download("/path/to/dest", "main", "https://example.com/user/repo.git")
 
 	require.NoError(t, err)
 	commandRunner.AssertExpectations(t)
@@ -287,13 +287,13 @@ func TestGit_Download_NewRepository_CreatesDirectoryAndClones(t *testing.T) {
 	fileSystem.On("MkdirAll", "/repo", testutil.AnyAccessMode).Return(nil)
 
 	// Should clone the repository
-	commandRunner.On("RunWithEnv", "git", sshBatchModeEnv, []string{"clone", "-c", "core.autocrlf=false", "https://github.com/user/repo.git", "--branch", "main", "/repo"}).
+	commandRunner.On("RunWithEnv", "git", sshBatchModeEnv, []string{"clone", "-c", "core.autocrlf=false", "https://example.com/user/repo.git", "--branch", "main", "/repo"}).
 		Return([]byte("Cloning..."), nil)
 
 	gitClient := NewGitClient(commandRunner, fileSystem)
 	git := NewGit(gitClient, fileSystem)
 
-	err := git.Download("https://github.com/user/repo.git", "main", "/repo")
+	err := git.Download("https://example.com/user/repo.git", "main", "/repo")
 
 	require.NoError(t, err)
 	fileSystem.AssertExpectations(t)
@@ -308,7 +308,7 @@ func TestGit_Download_ExistingRepository_UpdatesInsteadOfCloning(t *testing.T) {
 	fileSystem.On("FileExists", "/repo/.git/HEAD").Return(true, nil)
 
 	// Should update origin URL
-	commandRunner.On("RunInDir", "/repo", "git", []string{"remote", "set-url", "origin", "https://github.com/user/repo.git"}).
+	commandRunner.On("RunInDir", "/repo", "git", []string{"remote", "set-url", "origin", "https://example.com/user/repo.git"}).
 		Return([]byte(""), nil)
 
 	// Should fetch the ref (uses SSH batch mode)
@@ -332,7 +332,7 @@ func TestGit_Download_ExistingRepository_UpdatesInsteadOfCloning(t *testing.T) {
 	gitClient := NewGitClient(commandRunner, fileSystem)
 	git := NewGit(gitClient, fileSystem)
 
-	err := git.Download("https://github.com/user/repo.git", "main", "/repo")
+	err := git.Download("https://example.com/user/repo.git", "main", "/repo")
 
 	require.NoError(t, err)
 	fileSystem.AssertExpectations(t)
@@ -348,18 +348,18 @@ func TestGit_Download_Deduplication_SameRepoRefNotClonedTwice(t *testing.T) {
 
 	// Should create directory and clone only once
 	fileSystem.On("MkdirAll", "/repo", testutil.AnyAccessMode).Return(nil).Once()
-	commandRunner.On("RunWithEnv", "git", sshBatchModeEnv, []string{"clone", "-c", "core.autocrlf=false", "https://github.com/user/repo.git", "--branch", "main", "/repo"}).
+	commandRunner.On("RunWithEnv", "git", sshBatchModeEnv, []string{"clone", "-c", "core.autocrlf=false", "https://example.com/user/repo.git", "--branch", "main", "/repo"}).
 		Return([]byte("Cloning..."), nil).Once()
 
 	gitClient := NewGitClient(commandRunner, fileSystem)
 	git := NewGit(gitClient, fileSystem)
 
 	// First download
-	err := git.Download("https://github.com/user/repo.git", "main", "/repo")
+	err := git.Download("https://example.com/user/repo.git", "main", "/repo")
 	require.NoError(t, err)
 
 	// Second download with same repo+ref should not clone again
-	err = git.Download("https://github.com/user/repo.git", "main", "/repo")
+	err = git.Download("https://example.com/user/repo.git", "main", "/repo")
 	require.NoError(t, err)
 
 	// Verify clone was only called once
@@ -373,12 +373,12 @@ func TestGit_Download_DifferentRefs_BothDownloaded(t *testing.T) {
 	// First download: repo doesn't exist
 	fileSystem.On("FileExists", "/repo/.git/HEAD").Return(false, nil).Once()
 	fileSystem.On("MkdirAll", "/repo", testutil.AnyAccessMode).Return(nil).Once()
-	commandRunner.On("RunWithEnv", "git", sshBatchModeEnv, []string{"clone", "-c", "core.autocrlf=false", "https://github.com/user/repo.git", "--branch", "main", "/repo"}).
+	commandRunner.On("RunWithEnv", "git", sshBatchModeEnv, []string{"clone", "-c", "core.autocrlf=false", "https://example.com/user/repo.git", "--branch", "main", "/repo"}).
 		Return([]byte("Cloning..."), nil).Once()
 
 	// Second download with different ref: repo now exists
 	fileSystem.On("FileExists", "/repo/.git/HEAD").Return(true, nil).Once()
-	commandRunner.On("RunInDir", "/repo", "git", []string{"remote", "set-url", "origin", "https://github.com/user/repo.git"}).
+	commandRunner.On("RunInDir", "/repo", "git", []string{"remote", "set-url", "origin", "https://example.com/user/repo.git"}).
 		Return([]byte(""), nil)
 	commandRunner.On("RunWithEnvInDir", "/repo", sshBatchModeEnv, "git", []string{"-c", "core.autocrlf=false", "fetch", "origin", "-f", "feature"}).
 		Return([]byte(""), nil)
@@ -393,11 +393,11 @@ func TestGit_Download_DifferentRefs_BothDownloaded(t *testing.T) {
 	git := NewGit(gitClient, fileSystem)
 
 	// First download with main
-	err := git.Download("https://github.com/user/repo.git", "main", "/repo")
+	err := git.Download("https://example.com/user/repo.git", "main", "/repo")
 	require.NoError(t, err)
 
 	// Second download with feature (different ref)
-	err = git.Download("https://github.com/user/repo.git", "feature", "/repo")
+	err = git.Download("https://example.com/user/repo.git", "feature", "/repo")
 	require.NoError(t, err)
 
 	// Both should have been processed
@@ -412,7 +412,7 @@ func TestGit_Download_ExistingRepo_ResetsToBranch_WhenBehindOrigin(t *testing.T)
 	fileSystem.On("FileExists", "/repo/.git/HEAD").Return(true, nil)
 
 	// Update origin
-	commandRunner.On("RunInDir", "/repo", "git", []string{"remote", "set-url", "origin", "https://github.com/user/repo.git"}).
+	commandRunner.On("RunInDir", "/repo", "git", []string{"remote", "set-url", "origin", "https://example.com/user/repo.git"}).
 		Return([]byte(""), nil)
 
 	// Fetch (uses SSH batch mode)
@@ -440,7 +440,7 @@ func TestGit_Download_ExistingRepo_ResetsToBranch_WhenBehindOrigin(t *testing.T)
 	gitClient := NewGitClient(commandRunner, fileSystem)
 	git := NewGit(gitClient, fileSystem)
 
-	err := git.Download("https://github.com/user/repo.git", "main", "/repo")
+	err := git.Download("https://example.com/user/repo.git", "main", "/repo")
 
 	require.NoError(t, err)
 	commandRunner.AssertCalled(t, "RunInDir", "/repo", "git", []string{"-c", "core.autocrlf=false", "reset", "--hard", "origin/main"})
@@ -451,12 +451,12 @@ func TestGit_Download_ExistingRepo_ResetsToBranch_WhenBehindOrigin(t *testing.T)
 func TestGitClient_Download_SSHAuthError_ProvidesHelpfulMessage(t *testing.T) {
 	commandRunner := new(testutil.MockCommandRunner)
 	fileSystem := new(testutil.MockFileSystem)
-	commandRunner.On("RunWithEnv", "git", sshBatchModeEnv, []string{"clone", "-c", "core.autocrlf=false", "git@github.com:user/repo.git", "--branch", "main", "/path/to/dest"}).
+	commandRunner.On("RunWithEnv", "git", sshBatchModeEnv, []string{"clone", "-c", "core.autocrlf=false", "git@example.com:user/repo.git", "--branch", "main", "/path/to/dest"}).
 		Return([]byte("Permission denied (publickey)."), errors.New("exit status 128"))
 
 	client := NewGitClient(commandRunner, fileSystem)
 
-	err := client.Download("/path/to/dest", "main", "git@github.com:user/repo.git")
+	err := client.Download("/path/to/dest", "main", "git@example.com:user/repo.git")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "SSH authentication failed")
@@ -467,12 +467,12 @@ func TestGitClient_Download_SSHAuthError_ProvidesHelpfulMessage(t *testing.T) {
 func TestGitClient_Download_SSHHostKeyError_ProvidesHelpfulMessage(t *testing.T) {
 	commandRunner := new(testutil.MockCommandRunner)
 	fileSystem := new(testutil.MockFileSystem)
-	commandRunner.On("RunWithEnv", "git", sshBatchModeEnv, []string{"clone", "-c", "core.autocrlf=false", "git@github.com:user/repo.git", "--branch", "main", "/path/to/dest"}).
+	commandRunner.On("RunWithEnv", "git", sshBatchModeEnv, []string{"clone", "-c", "core.autocrlf=false", "git@example.com:user/repo.git", "--branch", "main", "/path/to/dest"}).
 		Return([]byte("Host key verification failed."), errors.New("exit status 128"))
 
 	client := NewGitClient(commandRunner, fileSystem)
 
-	err := client.Download("/path/to/dest", "main", "git@github.com:user/repo.git")
+	err := client.Download("/path/to/dest", "main", "git@example.com:user/repo.git")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "SSH host key verification failed")

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"pilot/internal/cli/output"
@@ -54,10 +55,11 @@ func (h *RunCommandHandler) Handle(scripts map[string]string, executionPlan []st
 		}
 
 		if len(dependentServices) > 0 {
-			var dependentServiceNames []string
+			dependentServiceNames := make([]string, 0, len(dependentServices))
 			for _, service := range dependentServices {
 				dependentServiceNames = append(dependentServiceNames, service.Name)
 			}
+			sort.Strings(dependentServiceNames)
 			output.PrintStep(
 				fmt.Sprintf(
 					"Updating repositories: %s",
@@ -96,6 +98,16 @@ func (h *RunCommandHandler) Handle(scripts map[string]string, executionPlan []st
 }
 
 func findServiceDependencies(script string, existingServices []domain.Service) ([]domain.Service, error) {
+	if core.ReferencesAllServices(script) {
+		services := make([]domain.Service, 0)
+		for _, service := range existingServices {
+			if service.GitRepoPath != "" && service.GitRef != "" {
+				services = append(services, service)
+			}
+		}
+		return services, nil
+	}
+
 	serviceRefs := core.ExtractServiceReferences(script)
 
 	services := make([]domain.Service, 0)

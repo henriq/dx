@@ -391,6 +391,27 @@ When `import` is set, services are matched by name and merged with the following
 | `dockerImages`                               | Merged by name; individual image fields are overlaid                   |
 | `remoteImages`                               | Appended to base list                                                  |
 | `certificates`                               | Merged by `k8sSecret.name`; individual certificate fields are overlaid |
+| `minPilotVersion`                            | Higher value wins (see [Minimum Pilot Version](#minimum-pilot-version)) |
+
+### Minimum Pilot Version
+
+Pin the minimum Pilot version your configuration requires. When a developer runs an older binary, Pilot prints a red warning on every command so they know to upgrade before something subtler breaks.
+
+```yaml
+minPilotVersion: v1.4.0      # top-level: applies to the whole file
+
+contexts:
+  - name: my-app
+    minPilotVersion: v1.5.0  # per-context: applies to this context (and its import)
+    import: /shared/team-config.yaml
+    services:
+      - name: api
+        # ...
+```
+
+The field is accepted at the top level of `~/.pilot-config.yaml`, on each context, and at the top level of imported files. The effective requirement is the **highest** value declared anywhere — so a shared team config can raise the floor for everyone without local overrides being able to lower it.
+
+Values must be valid semver (with or without a leading `v`). Development builds (binaries with no version stamped in) skip the check.
 
 ## Common Workflows
 

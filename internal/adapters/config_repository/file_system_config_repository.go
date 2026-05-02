@@ -230,6 +230,8 @@ func mergeConfigurationContexts(
 		base.Name = overlay.Name
 	}
 
+	base.MinPilotVersion = domain.HigherPilotVersion(base.MinPilotVersion, overlay.MinPilotVersion)
+
 	if overlay.Scripts != nil {
 		if base.Scripts == nil {
 			base.Scripts = make(map[string]string)

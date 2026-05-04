@@ -96,6 +96,24 @@ func TestVersionCheckCommandHandler_Handle(t *testing.T) {
 			},
 			wantWarn: true,
 		},
+		{
+			name:           "prerelease of required version — no warning",
+			currentVersion: "v1.8.12-prerelease+e706e158",
+			config: &domain.Config{
+				MinPilotVersion: "v1.8.12",
+				Contexts:        []domain.ConfigurationContext{{Name: "a"}},
+			},
+			wantWarn: false,
+		},
+		{
+			name:           "prerelease of older version — warning",
+			currentVersion: "v1.8.11-prerelease+abc",
+			config: &domain.Config{
+				MinPilotVersion: "v1.8.12",
+				Contexts:        []domain.ConfigurationContext{{Name: "a"}},
+			},
+			wantWarn: true,
+		},
 	}
 
 	for _, tt := range tests {

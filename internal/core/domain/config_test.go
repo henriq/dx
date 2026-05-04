@@ -217,6 +217,34 @@ func TestHigherPilotVersion(t *testing.T) {
 	}
 }
 
+func TestPilotVersionMeetsMinimum(t *testing.T) {
+	tests := []struct {
+		name     string
+		current  string
+		minimum  string
+		expected bool
+	}{
+		{"equal releases", "v1.8.12", "v1.8.12", true},
+		{"current newer", "v1.9.0", "v1.8.12", true},
+		{"current older", "v1.8.11", "v1.8.12", false},
+		{"prerelease of same release meets minimum", "v1.8.12-prerelease+e706e158", "v1.8.12", true},
+		{"prerelease of newer release meets minimum", "v1.9.0-prerelease+abc", "v1.8.12", true},
+		{"prerelease of older release fails minimum", "v1.8.11-prerelease+abc", "v1.8.12", false},
+		{"release meets prerelease minimum of same X.Y.Z", "v1.8.12", "v1.8.12-rc.1", true},
+		{"prerelease meets prerelease minimum of same X.Y.Z", "v1.8.12-prerelease+abc", "v1.8.12-rc.1", true},
+		{"different prerelease tags of same X.Y.Z are equivalent", "v1.8.12-alpha", "v1.8.12-rc.1", true},
+		{"build metadata only equals release", "v1.8.12+abc", "v1.8.12", true},
+		{"empty current fails any valid minimum", "", "v1.8.12", false},
+		{"both empty", "", "", true},
+		{"current without v prefix", "1.8.12", "v1.8.12", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, PilotVersionMeetsMinimum(tt.current, tt.minimum))
+		})
+	}
+}
+
 func TestConfig_EffectiveMinPilotVersion(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -176,6 +176,16 @@ func HigherPilotVersion(a, b string) string {
 	return b
 }
 
+// PilotVersionMeetsMinimum strips prerelease and build metadata before comparing so a prerelease build of vX.Y.Z is accepted as meeting a vX.Y.Z minimum.
+func PilotVersionMeetsMinimum(current, minimum string) bool {
+	return semver.Compare(releasePilotVersion(current), releasePilotVersion(minimum)) >= 0
+}
+
+func releasePilotVersion(version string) string {
+	canonical := semver.Canonical(NormalizePilotVersion(version))
+	return strings.TrimSuffix(canonical, semver.Prerelease(canonical))
+}
+
 // EffectiveMinPilotVersion returns the highest minimum-version requirement declared across the root config and every context, or "" when none is set.
 func (c *Config) EffectiveMinPilotVersion() string {
 	highest := c.MinPilotVersion

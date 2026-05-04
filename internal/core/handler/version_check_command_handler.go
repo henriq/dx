@@ -3,8 +3,6 @@ package handler
 import (
 	"fmt"
 
-	"golang.org/x/mod/semver"
-
 	"pilot/internal/cli/output"
 	"pilot/internal/core/domain"
 	"pilot/internal/ports"
@@ -37,7 +35,7 @@ func (h *VersionCheckCommandHandler) Handle(currentVersion string) bool {
 		return false
 	}
 
-	if semver.Compare(domain.NormalizePilotVersion(currentVersion), domain.NormalizePilotVersion(required)) >= 0 {
+	if domain.PilotVersionMeetsMinimum(currentVersion, required) {
 		return false
 	}
 

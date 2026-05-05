@@ -269,7 +269,7 @@ services:
 ```
 
 - **`type`**: `server` (ExtKeyUsageServerAuth) or `client` (ExtKeyUsageClientAuth)
-- **`dnsNames`**: Subject Alternative Names for the certificate. Supports wildcards (e.g., `*.api.localhost`). Must use a reserved TLD: `.localhost`, `.test`, `.example`, `.invalid`, `.local`, `.internal`, or `.home.arpa`
+- **`dnsNames`**: Subject Alternative Names for the certificate. Each name must be either a single label (e.g. `my-service` for in-cluster K8s service-to-service traffic) or end in a reserved suffix: `.localhost`, `.test`, `.example`, `.invalid`, `.local`, `.internal`, `.home.arpa`, `.svc`, or `.cluster.local`. Wildcards are supported but must scope at least two labels (e.g. `*.api.localhost`, `*.foo.svc`); `*.svc` and `*.cluster.local` are rejected as too broad.
 - **`k8sSecret.type`**: `tls` uses standard keys (`tls.crt`, `tls.key`, `ca.crt`); `opaque` uses custom key names defined in `keys`
 
 Certificates are automatically issued during `pilot install` and renewed when they have less than 14 days of validity remaining.

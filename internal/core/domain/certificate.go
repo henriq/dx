@@ -69,18 +69,29 @@ var dnsNameRegex = regexp.MustCompile(`^(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z
 var k8sNameRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$`)
 var k8sSecretKeyRegex = regexp.MustCompile(`^[-._a-zA-Z0-9]+$`)
 
-// allowedDNSSuffixes restricts certificate DNS names to reserved/special-use TLDs
-// that cannot collide with real public domains. This prevents the private CA from
-// being misused to issue certificates for public domains when added to a trust store.
+// allowedDNSSuffixes restricts certificate DNS names to suffixes that cannot
+// collide with real public domains. This prevents the private CA from being
+// misused to issue certificates for public domains when added to a trust store.
+//
+// The structural defense relies on the invariant that **no current or future
+// public TLD will end in any of these strings**. RFC-reserved TLDs satisfy this
+// by definition. The K8s entries (.svc, .cluster.local) are not IANA-reserved
+// — they are conventions of Kubernetes — but ICANN policy avoids delegating
+// gTLDs that conflict with widely deployed internal names, so treating them as
+// effectively reserved is reasonable for a per-developer dev CA. Do **not**
+// add suffixes here that could plausibly be delegated as a public TLD (e.g.
+// .corp, .home, .lan); that would break the substring-match defense.
 //
 // Sources:
-//   - .localhost  — RFC 6761 (loopback)
-//   - .test       — RFC 2606 (testing)
-//   - .example    — RFC 2606 (documentation)
-//   - .invalid    — RFC 2606 (guaranteed non-resolvable)
-//   - .local      — RFC 6762 (mDNS; also covers K8s internal names like foo.svc.cluster.local)
-//   - .internal   — ICANN (2024, private/internal use)
-//   - .home.arpa  — RFC 8375 (home networks)
+//   - .localhost     — RFC 6761 (loopback)
+//   - .test          — RFC 2606 (testing)
+//   - .example       — RFC 2606 (documentation)
+//   - .invalid       — RFC 2606 (guaranteed non-resolvable)
+//   - .local         — RFC 6762 (mDNS)
+//   - .internal      — ICANN (2024, private/internal use)
+//   - .home.arpa     — RFC 8375 (home networks)
+//   - .svc           — Kubernetes service DNS convention
+//   - .cluster.local — Kubernetes default cluster domain
 var allowedDNSSuffixes = []string{
 	".localhost",
 	".test",
@@ -89,10 +100,14 @@ var allowedDNSSuffixes = []string{
 	".local",
 	".internal",
 	".home.arpa",
+	".svc",
+	".cluster.local",
 }
 
 // hasAllowedDNSSuffix checks whether a DNS name (without wildcard prefix) ends
-// with one of the allowed reserved TLDs, or is exactly a bare reserved TLD.
+// with one of the allowed reserved suffixes, or is exactly a bare reserved
+// suffix. Single-label names (no dots) bypass this check via ValidateDNSNames
+// and are handled separately.
 func hasAllowedDNSSuffix(name string) bool {
 	name = strings.TrimPrefix(name, "*.")
 	lower := strings.ToLower(name)
@@ -115,8 +130,14 @@ func labelsWithinLimit(name string) bool {
 	return true
 }
 
-// ValidateDNSNames checks that the given DNS names are well-formed and use only
-// reserved TLDs. The label parameter is used in error messages to identify the source.
+// ValidateDNSNames checks that the given DNS names are well-formed and use
+// either a single label (e.g. "my-service" for in-cluster K8s addressing) or
+// a reserved suffix. The label parameter is used in error messages to identify
+// the source.
+//
+// Wildcard rule: a name "*.X" is rejected when X contains no dots (i.e. a
+// wildcard over a single label). RFC 6125 §6.4.3 disallows wildcards in the
+// rightmost label, and a wildcard over a bare label has unbounded scope.
 func ValidateDNSNames(dnsNames []string, label string) error {
 	if len(dnsNames) == 0 {
 		return fmt.Errorf("%s has empty dnsNames", label)
@@ -137,15 +158,57 @@ func ValidateDNSNames(dnsNames []string, label string) error {
 				label, name,
 			)
 		}
+		if err := validateWildcardScope(name, label); err != nil {
+			return err
+		}
+		stripped := strings.TrimPrefix(name, "*.")
+		if !strings.Contains(stripped, ".") {
+			continue
+		}
 		if !hasAllowedDNSSuffix(name) {
 			return fmt.Errorf(
-				"%s has dnsNames entry '%s' with a non-reserved TLD; "+
-					"only reserved TLDs are allowed (.localhost, .test, .example, .invalid, .local, .internal, .home.arpa)",
+				"%s has dnsNames entry '%s' with a non-reserved suffix; "+
+					"allowed forms are a single label (e.g. 'my-service') or a name ending in "+
+					".localhost, .test, .example, .invalid, .local, .internal, .home.arpa, "+
+					".svc, or .cluster.local",
 				label, name,
 			)
 		}
 	}
 	return nil
+}
+
+// validateWildcardScope rejects wildcards whose scope is a whole suffix root:
+// a single-label wildcard like "*.svc", or a multi-label wildcard whose
+// stripped form is exactly a recognized suffix (e.g. "*.cluster.local",
+// "*.home.arpa"). Such wildcards expand across every name under the suffix,
+// which is an unbounded SAN for a per-developer dev CA.
+func validateWildcardScope(name, label string) error {
+	if !strings.HasPrefix(name, "*.") {
+		return nil
+	}
+	stripped := strings.TrimPrefix(name, "*.")
+	if !strings.Contains(stripped, ".") || isAllowedDNSSuffixRoot(stripped) {
+		return fmt.Errorf(
+			"%s has dnsNames entry '%s' with a wildcard over too few labels; "+
+				"a wildcard must scope to at least one label below a reserved suffix "+
+				"(e.g. '*.foo.svc', not '*.svc' or '*.cluster.local')",
+			label, name,
+		)
+	}
+	return nil
+}
+
+// isAllowedDNSSuffixRoot reports whether a name (without leading dot) equals
+// one of the entries in allowedDNSSuffixes.
+func isAllowedDNSSuffixRoot(name string) bool {
+	lower := strings.ToLower(name)
+	for _, suffix := range allowedDNSSuffixes {
+		if lower == suffix[1:] {
+			return true
+		}
+	}
+	return false
 }
 
 // Validate checks the certificate request for correctness.

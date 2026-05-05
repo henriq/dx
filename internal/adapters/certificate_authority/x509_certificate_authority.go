@@ -210,14 +210,12 @@ func (ca *X509CertificateAuthority) IssueCertificate(contextName string, passphr
 
 	now := time.Now()
 	template := &x509.Certificate{
-		SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			CommonName: request.DNSNames[0],
-		},
-		DNSNames:  request.DNSNames,
-		NotBefore: now,
-		NotAfter:  now.AddDate(0, 0, certValidityDays),
-		KeyUsage:  x509.KeyUsageDigitalSignature,
+		SerialNumber:       serialNumber,
+		DNSNames:           request.DNSNames,
+		NotBefore:          now,
+		NotAfter:           now.AddDate(0, 0, certValidityDays),
+		KeyUsage:           x509.KeyUsageDigitalSignature,
+		SignatureAlgorithm: x509.ECDSAWithSHA256,
 	}
 
 	switch request.Type {

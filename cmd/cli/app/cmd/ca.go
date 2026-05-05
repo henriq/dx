@@ -131,8 +131,10 @@ var caIssueCmd = &cobra.Command{
 certificate and private key to local files. The CA is loaded (or created if
 none exists) automatically.
 
-DNS names must use reserved TLDs only (.localhost, .test, .example, .invalid,
-.local, .internal, .home.arpa).`,
+DNS names must be a single label (e.g. 'my-service' for in-cluster K8s
+service-to-service traffic) or end in a reserved suffix: .localhost, .test,
+.example, .invalid, .local, .internal, .home.arpa, .svc, or .cluster.local.
+Wildcards are allowed but must scope at least two labels (e.g. '*.foo.svc').`,
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	},

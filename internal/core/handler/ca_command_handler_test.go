@@ -685,7 +685,7 @@ func TestCACommandHandler_HandleIssue_InvalidDNSName(t *testing.T) {
 
 	_, _, err := sut.HandleIssue("server", []string{"api.example.com"})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "non-reserved TLD")
+	assert.Contains(t, err.Error(), "non-reserved suffix")
 }
 
 func TestCACommandHandler_HandleIssue_EmptyDNSNames(t *testing.T) {

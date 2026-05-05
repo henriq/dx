@@ -203,6 +203,16 @@ func TestCertificateRequest_Validate_ValidDNSNames(t *testing.T) {
 		{"home.arpa", "myhost.home.arpa"},
 		{"nested home.arpa", "device.lan.home.arpa"},
 		{"wildcard test", "*.api.test"},
+		{"single label", "my-service"},
+		{"single label hyphenated", "pilot-internal-tls"},
+		{"single label ending in svc", "mysvc"},
+		{"k8s short svc", "foo.svc"},
+		{"k8s namespaced svc", "foo.bar.svc"},
+		{"wildcard svc", "*.bar.svc"},
+		{"wildcard cluster.local", "*.bar.svc.cluster.local"},
+		{"label with xn-- prefix", "xn--example.svc"},
+		{"uppercase label", "MY-SERVICE"},
+		{"mixed case suffix", "Foo.SVC.CLUSTER.LOCAL"},
 	}
 
 	for _, tt := range tests {
@@ -225,6 +235,12 @@ func TestCertificateRequest_Validate_PublicTLDsRejected(t *testing.T) {
 		{"io", "app.example.io"},
 		{"dev", "my-app.dev"},
 		{"wildcard com", "*.api.example.com"},
+		{"unrecognized two-label", "service.namespace"},
+		{"unrecognized three-label", "service.namespace.foo"},
+		{"suffix-look-alike svc", "foo.notsvc"},
+		{"suffix-look-alike local", "foo.notlocal"},
+		{"public TLD trailing svc", "foo.svc.example.com"},
+		{"wildcard non-reserved multi-label", "*.foo.bar"},
 	}
 
 	for _, tt := range tests {
@@ -233,7 +249,31 @@ func TestCertificateRequest_Validate_PublicTLDsRejected(t *testing.T) {
 			cert.DNSNames = []string{tt.dnsName}
 			err := cert.Validate("svc", "ctx")
 			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "non-reserved TLD")
+			assert.Contains(t, err.Error(), "non-reserved suffix")
+		})
+	}
+}
+
+func TestCertificateRequest_Validate_WildcardScope(t *testing.T) {
+	tests := []struct {
+		name    string
+		dnsName string
+	}{
+		{"wildcard over single label", "*.my-service"},
+		{"wildcard at svc root", "*.svc"},
+		{"wildcard at cluster.local root", "*.cluster.local"},
+		{"wildcard at localhost root", "*.localhost"},
+		{"wildcard at uppercase svc root", "*.SVC"},
+		{"wildcard at mixed-case cluster.local root", "*.Cluster.Local"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cert := validServerCertificateRequest()
+			cert.DNSNames = []string{tt.dnsName}
+			err := cert.Validate("svc", "ctx")
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "wildcard over too few labels")
 		})
 	}
 }
@@ -363,6 +403,9 @@ func TestValidateDNSNames_Valid(t *testing.T) {
 		{"bare reserved TLD", []string{"localhost"}},
 		{"k8s internal", []string{"foo.svc.cluster.local"}},
 		{"home.arpa", []string{"myhost.home.arpa"}},
+		{"single label", []string{"my-service"}},
+		{"k8s short svc", []string{"foo.bar.svc"}},
+		{"single label and svc", []string{"my-service", "my-service.my-namespace.svc"}},
 	}
 
 	for _, tt := range tests {
@@ -381,7 +424,7 @@ func TestValidateDNSNames_Empty(t *testing.T) {
 func TestValidateDNSNames_PublicTLD(t *testing.T) {
 	err := ValidateDNSNames([]string{"api.example.com"}, "test")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "non-reserved TLD")
+	assert.Contains(t, err.Error(), "non-reserved suffix")
 }
 
 func TestValidateDNSNames_InvalidFormat(t *testing.T) {

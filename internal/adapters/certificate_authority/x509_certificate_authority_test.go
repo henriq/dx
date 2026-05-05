@@ -157,7 +157,8 @@ func TestX509CertificateAuthority_IssueCertificate_ServerCert(t *testing.T) {
 	cert, err := x509.ParseCertificate(block.Bytes)
 	require.NoError(t, err)
 
-	assert.Equal(t, "foo.localhost", cert.Subject.CommonName)
+	assert.Empty(t, cert.Subject.CommonName)
+	assert.Equal(t, x509.ECDSAWithSHA256, cert.SignatureAlgorithm)
 	assert.Equal(t, []string{"foo.localhost", "*.foo.localhost"}, cert.DNSNames)
 	assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
 	assert.False(t, cert.IsCA)
@@ -191,6 +192,34 @@ func TestX509CertificateAuthority_IssueCertificate_ClientCert(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageClientAuth)
+}
+
+func TestX509CertificateAuthority_IssueCertificate_SingleLabelSAN(t *testing.T) {
+	ca, _, passphrase := setupTestCA(t)
+	err := ca.createCA("test-ctx", passphrase)
+	require.NoError(t, err)
+
+	request := domain.CertificateRequest{
+		Type:     domain.CertificateTypeServer,
+		DNSNames: []string{"my-service"},
+		K8sSecret: domain.K8sSecretConfig{
+			Name: "my-service-tls",
+			Type: domain.K8sSecretTypeTLS,
+		},
+	}
+
+	issued, err := ca.IssueCertificate("test-ctx", passphrase, request)
+	require.NoError(t, err)
+
+	block, _ := pem.Decode(issued.CertPEM)
+	require.NotNil(t, block)
+	cert, err := x509.ParseCertificate(block.Bytes)
+	require.NoError(t, err)
+
+	assert.Empty(t, cert.Subject.CommonName)
+	assert.Empty(t, cert.Subject.String())
+	assert.Equal(t, []string{"my-service"}, cert.DNSNames)
+	assert.Len(t, cert.DNSNames, 1)
 }
 
 func TestX509CertificateAuthority_IssueCertificate_CertSignedByCA(t *testing.T) {

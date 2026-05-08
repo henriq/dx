@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 // noCertProvisioner creates a CertificateProvisioner with unconfigured mocks.
@@ -112,7 +113,7 @@ func TestInstallCommandHandler_HandleInstallsAllServices(t *testing.T) {
 		internalTLSProvisioner("Test"),
 	)
 
-	result := sut.Handle([]string{}, "all", false)
+	result := sut.Handle([]string{}, "all", false, domain.HelmChartOverrides{})
 
 	assert.Nil(t, result)
 	containerImageRepository.AssertExpectations(t)
@@ -186,7 +187,7 @@ func TestInstallCommandHandler_HandleInstallsOnlySelectedService(t *testing.T) {
 		internalTLSProvisioner("Test"),
 	)
 
-	result := sut.Handle([]string{"service-1"}, "all", false)
+	result := sut.Handle([]string{"service-1"}, "all", false, domain.HelmChartOverrides{})
 
 	assert.Nil(t, result)
 	containerImageRepository.AssertExpectations(t)
@@ -255,7 +256,7 @@ func TestInstallCommandHandler_HandleWithInterceptHttp(t *testing.T) {
 		internalTLSProvisioner("Test"),
 	)
 
-	result := sut.Handle([]string{}, "all", true)
+	result := sut.Handle([]string{}, "all", true, domain.HelmChartOverrides{})
 
 	assert.Nil(t, result)
 	containerImageRepository.AssertExpectations(t)
@@ -332,7 +333,7 @@ func TestInstallCommandHandler_HandleSkipsDevProxyWhenChecksumUnchanged(t *testi
 		internalTLSProvisioner("Test"),
 	)
 
-	result := sut.Handle([]string{}, "default", false)
+	result := sut.Handle([]string{}, "default", false, domain.HelmChartOverrides{})
 
 	assert.Nil(t, result)
 	// Verify BuildImage was NOT called since dev-proxy checksum matched
@@ -410,7 +411,7 @@ func TestInstallCommandHandler_HandleAlwaysRebuildsDevProxyWithInterceptHttp(t *
 	)
 
 	// Even though checksum would match, dev-proxy should always rebuild with interceptHttp
-	result := sut.Handle([]string{}, "default", true)
+	result := sut.Handle([]string{}, "default", true, domain.HelmChartOverrides{})
 
 	assert.Nil(t, result)
 	containerImageRepository.AssertNumberOfCalls(t, "BuildImage", 2) // HAProxy + mitmproxy
@@ -487,7 +488,7 @@ func TestInstallCommandHandler_HandleProvisionsCertificatesDuringInstall(t *test
 		devProxyManager, environmentEnsurer, scm, provisioner,
 	)
 
-	result := sut.Handle([]string{}, "all", false)
+	result := sut.Handle([]string{}, "all", false, domain.HelmChartOverrides{})
 
 	assert.Nil(t, result)
 	mockCA.AssertExpectations(t)
@@ -547,7 +548,7 @@ func TestInstallCommandHandler_HandleReturnsErrorWhenCertificateProvisioningFail
 		devProxyManager, environmentEnsurer, scm, provisioner,
 	)
 
-	result := sut.Handle([]string{}, "all", false)
+	result := sut.Handle([]string{}, "all", false, domain.HelmChartOverrides{})
 
 	assert.Error(t, result)
 	assert.Contains(t, result.Error(), "failed to provision certificates")
@@ -598,7 +599,7 @@ func TestInstallCommandHandler_HandleReturnsErrorFromShouldRebuildDevProxy(t *te
 		internalTLSProvisioner("Test"),
 	)
 
-	result := sut.Handle([]string{}, "default", false)
+	result := sut.Handle([]string{}, "default", false, domain.HelmChartOverrides{})
 
 	assert.Error(t, result)
 	containerOrchestrator.AssertNumberOfCalls(t, "InstallService", 0)
@@ -653,7 +654,7 @@ func TestInstallCommandHandler_Handle_InstallDevProxyError(t *testing.T) {
 		internalTLSProvisioner("Test"),
 	)
 
-	result := sut.Handle([]string{}, "default", false)
+	result := sut.Handle([]string{}, "default", false, domain.HelmChartOverrides{})
 
 	assert.Error(t, result)
 	containerImageRepository.AssertNumberOfCalls(t, "BuildImage", 0)
@@ -714,7 +715,7 @@ func TestInstallCommandHandler_Handle_ScmDownloadError(t *testing.T) {
 		internalTLSProvisioner("Test"),
 	)
 
-	result := sut.Handle([]string{}, "all", false)
+	result := sut.Handle([]string{}, "all", false, domain.HelmChartOverrides{})
 
 	assert.ErrorIs(t, result, assert.AnError)
 	containerOrchestrator.AssertNotCalled(t, "InstallService", mock.Anything, mock.Anything)
@@ -775,9 +776,215 @@ func TestInstallCommandHandler_Handle_InstallServiceError(t *testing.T) {
 		internalTLSProvisioner("Test"),
 	)
 
-	result := sut.Handle([]string{}, "all", false)
+	result := sut.Handle([]string{}, "all", false, domain.HelmChartOverrides{})
 
 	assert.Error(t, result)
 	assert.Contains(t, result.Error(), "failed to install service")
 	scm.AssertExpectations(t)
+}
+
+func TestInstallCommandHandler_HandleSkipsScmDownloadForOverriddenService(t *testing.T) {
+	localChartDirectory := t.TempDir()
+	configContext := &domain.ConfigurationContext{
+		Name: "Test",
+		Services: []domain.Service{
+			{
+				Name:                  "service-1",
+				HelmRepoPath:          "any-repo-1",
+				HelmBranch:            "any-branch-1",
+				HelmChartRelativePath: "charts/api",
+				HelmPath:              "/cache/service-1",
+				Profiles:              []string{"all"},
+			},
+			{
+				Name:         "service-2",
+				HelmRepoPath: "any-repo-2",
+				HelmBranch:   "any-branch-2",
+				HelmPath:     "/cache/service-2",
+				Profiles:     []string{"all"},
+			},
+		},
+	}
+	configRepository := new(testutil.MockConfigRepository)
+	configRepository.On("LoadEnvKey", mock.Anything).Return("any-key", nil)
+	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
+	containerOrchestrator := new(testutil.MockContainerOrchestrator)
+	containerOrchestrator.On("CreateClusterEnvironmentKey").Return("any-key", nil)
+	containerOrchestrator.On("InstallService", mock.MatchedBy(func(service *domain.Service) bool {
+		return service.Name == "service-1" &&
+			service.HelmPath == localChartDirectory &&
+			service.HelmChartRelativePath == ""
+	}), mock.Anything).Return(nil).Once()
+	containerOrchestrator.On("InstallService", mock.MatchedBy(func(service *domain.Service) bool {
+		return service.Name == "service-2" &&
+			service.HelmPath == "/cache/service-2" &&
+			service.HelmChartRelativePath == ""
+	}), mock.Anything).Return(nil).Once()
+	containerOrchestrator.On("InstallDevProxy", mock.Anything, mock.Anything).Return(nil)
+	containerOrchestrator.On("GetDevProxyChecksum").Return("", nil)
+	fileSystem := new(testutil.MockFileSystem)
+	fileSystem.On("WriteFile", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	fileSystem.On("HomeDir").Return("/home/test", nil)
+	fileSystem.On("RemoveAll", mock.Anything).Return(nil)
+	scm := new(testutil.MockScm)
+	scm.On(
+		"Download",
+		"any-repo-2",
+		"any-branch-2",
+		"/cache/service-2",
+	).Return(nil)
+	containerImageRepository := new(testutil.MockContainerImageRepository)
+	containerImageRepository.On("BuildImage", mock.Anything).Return(nil)
+	configGenerator := core.NewDevProxyConfigGenerator()
+	devProxyManager := core.NewDevProxyManager(
+		configRepository,
+		fileSystem,
+		containerImageRepository,
+		containerOrchestrator,
+		configGenerator,
+	)
+	environmentEnsurer := core.NewEnvironmentEnsurer(
+		configRepository,
+		containerOrchestrator,
+	)
+	sut := NewInstallCommandHandler(
+		configRepository,
+		containerImageRepository,
+		containerOrchestrator,
+		devProxyManager,
+		environmentEnsurer,
+		scm,
+		internalTLSProvisioner("Test"),
+	)
+
+	overrides, err := domain.NewHelmChartOverrides(map[string]string{"service-1": localChartDirectory})
+	require.NoError(t, err)
+	result := sut.Handle([]string{}, "all", false, overrides)
+
+	assert.Nil(t, result)
+	scm.AssertNumberOfCalls(t, "Download", 1)
+	containerOrchestrator.AssertExpectations(t)
+}
+
+func TestInstallCommandHandler_HandleFailsOnUnknownOverrideService(t *testing.T) {
+	configContext := &domain.ConfigurationContext{
+		Name: "Test",
+		Services: []domain.Service{
+			{
+				Name:         "service-1",
+				HelmRepoPath: "any-repo-1",
+				HelmBranch:   "any-branch-1",
+				Profiles:     []string{"all"},
+			},
+		},
+	}
+	configRepository := new(testutil.MockConfigRepository)
+	configRepository.On("LoadEnvKey", mock.Anything).Return("any-key", nil)
+	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
+	containerOrchestrator := new(testutil.MockContainerOrchestrator)
+	containerOrchestrator.On("CreateClusterEnvironmentKey").Return("any-key", nil)
+	scm := new(testutil.MockScm)
+	containerImageRepository := new(testutil.MockContainerImageRepository)
+	fileSystem := new(testutil.MockFileSystem)
+	configGenerator := core.NewDevProxyConfigGenerator()
+	devProxyManager := core.NewDevProxyManager(
+		configRepository,
+		fileSystem,
+		containerImageRepository,
+		containerOrchestrator,
+		configGenerator,
+	)
+	environmentEnsurer := core.NewEnvironmentEnsurer(
+		configRepository,
+		containerOrchestrator,
+	)
+	sut := NewInstallCommandHandler(
+		configRepository,
+		containerImageRepository,
+		containerOrchestrator,
+		devProxyManager,
+		environmentEnsurer,
+		scm,
+		noCertProvisioner(),
+	)
+
+	overrides, err := domain.NewHelmChartOverrides(map[string]string{"unknown": "/does-not-exist/local-chart"})
+	require.NoError(t, err)
+	result := sut.Handle([]string{}, "all", false, overrides)
+
+	require.Error(t, result)
+	assert.Contains(t, result.Error(), "unknown")
+	assert.Contains(t, result.Error(), "service-1", "error must list the available services")
+	scm.AssertNumberOfCalls(t, "Download", 0)
+	containerOrchestrator.AssertNotCalled(t, "InstallService", mock.Anything, mock.Anything)
+}
+
+func TestInstallCommandHandler_HandleIgnoresOverrideForOutOfScopeService(t *testing.T) {
+	localChartDirectory := t.TempDir()
+	configContext := &domain.ConfigurationContext{
+		Name: "Test",
+		Services: []domain.Service{
+			{
+				Name:         "service-1",
+				HelmRepoPath: "any-repo-1",
+				HelmBranch:   "any-branch-1",
+				HelmPath:     "/cache/service-1",
+				Profiles:     []string{"all"},
+			},
+			{
+				Name:         "service-2",
+				HelmRepoPath: "any-repo-2",
+				HelmBranch:   "any-branch-2",
+				HelmPath:     "/cache/service-2",
+				Profiles:     []string{"all"},
+			},
+		},
+	}
+	configRepository := new(testutil.MockConfigRepository)
+	configRepository.On("LoadEnvKey", mock.Anything).Return("any-key", nil)
+	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
+	containerOrchestrator := new(testutil.MockContainerOrchestrator)
+	containerOrchestrator.On("CreateClusterEnvironmentKey").Return("any-key", nil)
+	containerOrchestrator.On("InstallService", mock.MatchedBy(func(service *domain.Service) bool {
+		return service.Name == "service-1" && service.HelmPath == "/cache/service-1"
+	}), mock.Anything).Return(nil).Once()
+	containerOrchestrator.On("InstallDevProxy", mock.Anything, mock.Anything).Return(nil)
+	containerOrchestrator.On("GetDevProxyChecksum").Return("", nil)
+	fileSystem := new(testutil.MockFileSystem)
+	fileSystem.On("WriteFile", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	fileSystem.On("HomeDir").Return("/home/test", nil)
+	fileSystem.On("RemoveAll", mock.Anything).Return(nil)
+	scm := new(testutil.MockScm)
+	scm.On("Download", "any-repo-1", "any-branch-1", "/cache/service-1").Return(nil)
+	containerImageRepository := new(testutil.MockContainerImageRepository)
+	containerImageRepository.On("BuildImage", mock.Anything).Return(nil)
+	configGenerator := core.NewDevProxyConfigGenerator()
+	devProxyManager := core.NewDevProxyManager(
+		configRepository,
+		fileSystem,
+		containerImageRepository,
+		containerOrchestrator,
+		configGenerator,
+	)
+	environmentEnsurer := core.NewEnvironmentEnsurer(
+		configRepository,
+		containerOrchestrator,
+	)
+	sut := NewInstallCommandHandler(
+		configRepository,
+		containerImageRepository,
+		containerOrchestrator,
+		devProxyManager,
+		environmentEnsurer,
+		scm,
+		internalTLSProvisioner("Test"),
+	)
+
+	overrides, err := domain.NewHelmChartOverrides(map[string]string{"service-2": localChartDirectory})
+	require.NoError(t, err)
+	result := sut.Handle([]string{"service-1"}, "all", false, overrides)
+
+	assert.Nil(t, result)
+	scm.AssertNumberOfCalls(t, "Download", 1)
+	containerOrchestrator.AssertNumberOfCalls(t, "InstallService", 1)
 }

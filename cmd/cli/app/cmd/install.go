@@ -6,8 +6,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var installHelmChartOverrides []string
+
 func init() {
 	installCmd.Flags().BoolP("intercept-http", "i", false, "Enable HTTP interception via mitmweb proxy")
+	RegisterHelmChartOverrideFlag(installCmd, &installHelmChartOverrides)
 	rootCmd.AddCommand(installCmd)
 }
 
@@ -34,16 +37,23 @@ enabled, the mitmweb UI is available at:
   pilot install --intercept-http
 
   # Install all services regardless of profile
-  pilot install -p all`,
+  pilot install -p all
+
+  # Render a service's Helm chart from a local directory
+  pilot install api --helm-chart api:./charts/api`,
 	Args:              ServiceArgsValidator,
 	ValidArgsFunction: ServiceArgsCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		interceptHttp, _ := cmd.Flags().GetBool("intercept-http")
+		helmChartOverrides, err := ParseHelmChartOverrides(installHelmChartOverrides)
+		if err != nil {
+			return err
+		}
 		handler, err := app.InjectInstallCommandHandler()
 		if err != nil {
 			return err
 		}
 
-		return handler.Handle(args, *profile, interceptHttp)
+		return handler.Handle(args, *profile, interceptHttp, helmChartOverrides)
 	},
 }

@@ -13,7 +13,7 @@ import (
 
 func TestHelmClient_Template(t *testing.T) {
 	runner := new(testutil.MockCommandRunner)
-	runner.On("Run", "helm", []string{"template", "my-release", "/path/to/chart", "--namespace", "my-namespace", "--set", "foo=bar"}).
+	runner.On("Run", "helm", []string{"template", "--namespace", "my-namespace", "--set", "foo=bar", "--", "my-release", "/path/to/chart"}).
 		Return([]byte("apiVersion: v1\nkind: ConfigMap\n"), nil)
 
 	client := NewHelmClient(runner)
@@ -27,7 +27,7 @@ func TestHelmClient_Template(t *testing.T) {
 
 func TestHelmClient_Template_NoNamespace(t *testing.T) {
 	runner := new(testutil.MockCommandRunner)
-	runner.On("Run", "helm", []string{"template", "my-release", "/path/to/chart"}).
+	runner.On("Run", "helm", []string{"template", "--", "my-release", "/path/to/chart"}).
 		Return([]byte(""), nil)
 
 	client := NewHelmClient(runner)
@@ -40,7 +40,7 @@ func TestHelmClient_Template_NoNamespace(t *testing.T) {
 
 func TestHelmClient_Template_Error(t *testing.T) {
 	runner := new(testutil.MockCommandRunner)
-	runner.On("Run", "helm", []string{"template", "my-release", "/path/to/chart"}).
+	runner.On("Run", "helm", []string{"template", "--", "my-release", "/path/to/chart"}).
 		Return([]byte("Error: chart not found"), errors.New("exit status 1"))
 
 	client := NewHelmClient(runner)
@@ -54,7 +54,7 @@ func TestHelmClient_Template_Error(t *testing.T) {
 
 func TestHelmClient_UpgradeFromManifests(t *testing.T) {
 	runner := new(testutil.MockCommandRunner)
-	runner.On("Run", "helm", []string{"upgrade", "--install", "--labels", "managed-by=pilot", "my-release", "/path/to/wrapper", "--namespace", "my-namespace"}).
+	runner.On("Run", "helm", []string{"upgrade", "--install", "--labels", "managed-by=pilot", "--namespace", "my-namespace", "--", "my-release", "/path/to/wrapper"}).
 		Return([]byte("Release \"my-release\" has been upgraded."), nil)
 
 	client := NewHelmClient(runner)
@@ -67,7 +67,7 @@ func TestHelmClient_UpgradeFromManifests(t *testing.T) {
 
 func TestHelmClient_UpgradeFromManifests_NoNamespace(t *testing.T) {
 	runner := new(testutil.MockCommandRunner)
-	runner.On("Run", "helm", []string{"upgrade", "--install", "--labels", "managed-by=pilot", "my-release", "/path/to/wrapper"}).
+	runner.On("Run", "helm", []string{"upgrade", "--install", "--labels", "managed-by=pilot", "--", "my-release", "/path/to/wrapper"}).
 		Return([]byte(""), nil)
 
 	client := NewHelmClient(runner)
@@ -80,7 +80,7 @@ func TestHelmClient_UpgradeFromManifests_NoNamespace(t *testing.T) {
 
 func TestHelmClient_Uninstall(t *testing.T) {
 	runner := new(testutil.MockCommandRunner)
-	runner.On("Run", "helm", []string{"uninstall", "my-release", "--namespace", "my-namespace"}).
+	runner.On("Run", "helm", []string{"uninstall", "--namespace", "my-namespace", "--", "my-release"}).
 		Return([]byte(""), nil)
 
 	client := NewHelmClient(runner)
@@ -93,7 +93,7 @@ func TestHelmClient_Uninstall(t *testing.T) {
 
 func TestHelmClient_Uninstall_NoNamespace(t *testing.T) {
 	runner := new(testutil.MockCommandRunner)
-	runner.On("Run", "helm", []string{"uninstall", "my-release"}).
+	runner.On("Run", "helm", []string{"uninstall", "--", "my-release"}).
 		Return([]byte(""), nil)
 
 	client := NewHelmClient(runner)
@@ -148,7 +148,7 @@ func TestHelmClient_List_Empty(t *testing.T) {
 
 func TestHelmClient_UpgradeFromManifests_Error(t *testing.T) {
 	runner := new(testutil.MockCommandRunner)
-	runner.On("Run", "helm", []string{"upgrade", "--install", "--labels", "managed-by=pilot", "my-release", "/path/to/wrapper", "--namespace", "my-namespace"}).
+	runner.On("Run", "helm", []string{"upgrade", "--install", "--labels", "managed-by=pilot", "--namespace", "my-namespace", "--", "my-release", "/path/to/wrapper"}).
 		Return([]byte("Error: release failed"), errors.New("exit status 1"))
 
 	client := NewHelmClient(runner)
@@ -163,7 +163,7 @@ func TestHelmClient_UpgradeFromManifests_Error(t *testing.T) {
 
 func TestHelmClient_Uninstall_Error(t *testing.T) {
 	runner := new(testutil.MockCommandRunner)
-	runner.On("Run", "helm", []string{"uninstall", "my-release", "--namespace", "my-namespace"}).
+	runner.On("Run", "helm", []string{"uninstall", "--namespace", "my-namespace", "--", "my-release"}).
 		Return([]byte("Error: release not found"), errors.New("exit status 1"))
 
 	client := NewHelmClient(runner)

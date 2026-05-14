@@ -7,6 +7,7 @@ import (
 	"pilot/internal/cli/output"
 	"pilot/internal/cli/progress"
 	"pilot/internal/core"
+	"pilot/internal/core/domain"
 	"pilot/internal/ports"
 )
 
@@ -40,7 +41,12 @@ func NewInstallCommandHandler(
 	}
 }
 
-func (h *InstallCommandHandler) Handle(services []string, selectedProfile string, interceptHttp bool) error {
+func (h *InstallCommandHandler) Handle(
+	services []string,
+	selectedProfile string,
+	interceptHttp bool,
+	helmChartOverrides domain.HelmChartOverrides,
+) error {
 	err := h.environmentEnsurer.EnsureExpectedClusterIsSelected()
 	if err != nil {
 		return err
@@ -51,10 +57,21 @@ func (h *InstallCommandHandler) Handle(services []string, selectedProfile string
 		return err
 	}
 
+	if err := helmChartOverrides.ValidateAgainstServices(configContext.Services); err != nil {
+		return err
+	}
+
 	// Collect services to install
 	servicesToInstall := configContext.FilterServices(services, selectedProfile)
 	for i := range servicesToInstall {
 		servicesToInstall[i].InterceptHttp = interceptHttp
+	}
+
+	for _, unusedOverride := range helmChartOverrides.FindUnusedOverrides(servicesToInstall) {
+		output.PrintWarning(fmt.Sprintf(
+			"--helm-chart override for %q: no matching service in scope; ignoring",
+			unusedOverride,
+		))
 	}
 
 	// Provision certificate data for services that need them (includes internal TLS for dev-proxy)
@@ -124,18 +141,27 @@ func (h *InstallCommandHandler) Handle(services []string, selectedProfile string
 			names = append(names, svc.Name)
 		}
 
+		for _, service := range servicesToInstall {
+			if chartDirectory, hasOverride := helmChartOverrides.LookupChartDirectory(service.Name); hasOverride {
+				output.PrintSecondary(fmt.Sprintf("Using local Helm chart for %s at %s", service.Name, chartDirectory))
+			}
+		}
+
 		tracker := progress.NewTrackerWithVerb(names, "Installing")
 		tracker.Start()
 
 		for i, service := range servicesToInstall {
 			tracker.StartItem(i)
 
-			err := h.scm.Download(service.HelmRepoPath, service.HelmBranch, service.HelmPath)
-			if err != nil {
-				tracker.CompleteItem(i, err)
-				tracker.PrintItemComplete(i)
-				tracker.Stop()
-				return err
+			service, isOverridden := applyHelmChartOverride(service, helmChartOverrides)
+			if !isOverridden {
+				err := h.scm.Download(service.HelmRepoPath, service.HelmBranch, service.HelmPath)
+				if err != nil {
+					tracker.CompleteItem(i, err)
+					tracker.PrintItemComplete(i)
+					tracker.Stop()
+					return err
+				}
 			}
 
 			if err = h.containerOrchestrator.InstallService(&service, renderedCertSecrets[service.Name]); err != nil {
@@ -173,4 +199,14 @@ func (h *InstallCommandHandler) Handle(services []string, selectedProfile string
 	}
 
 	return nil
+}
+
+func applyHelmChartOverride(service domain.Service, overrides domain.HelmChartOverrides) (domain.Service, bool) {
+	chartDirectory, hasOverride := overrides.LookupChartDirectory(service.Name)
+	if !hasOverride {
+		return service, false
+	}
+	service.HelmPath = chartDirectory
+	service.HelmChartRelativePath = ""
+	return service, true
 }

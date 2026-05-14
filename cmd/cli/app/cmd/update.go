@@ -7,11 +7,13 @@ import (
 )
 
 var pullImages bool
+var updateHelmChartOverrides []string
 
 func init() {
 	rootCmd.AddCommand(updateCmd)
 	updateCmd.Flags().BoolVar(&pullImages, "pull", false, "pull images instead of building them")
 	updateCmd.Flags().BoolP("intercept-http", "i", false, "Enable HTTP interception via mitmweb proxy")
+	RegisterHelmChartOverrideFlag(updateCmd, &updateHelmChartOverrides)
 }
 
 var updateCmd = &cobra.Command{
@@ -41,11 +43,18 @@ Use --intercept-http to enable HTTP traffic interception via mitmweb.`,
   pilot update --pull api frontend
 
   # Build and redeploy with HTTP traffic interception
-  pilot update --intercept-http`,
+  pilot update --intercept-http
+
+  # Render a service's Helm chart from a local directory
+  pilot update api --helm-chart api:./charts/api`,
 	Args:              ServiceArgsValidator,
 	ValidArgsFunction: ServiceArgsCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		interceptHttp, _ := cmd.Flags().GetBool("intercept-http")
+		helmChartOverrides, err := ParseHelmChartOverrides(updateHelmChartOverrides)
+		if err != nil {
+			return err
+		}
 		if pullImages {
 			pullHandler, err := app.InjectPullCommandHandler()
 			if err != nil {
@@ -72,6 +81,6 @@ Use --intercept-http to enable HTTP traffic interception via mitmweb.`,
 			return err
 		}
 
-		return installHandler.Handle(args, *profile, interceptHttp)
+		return installHandler.Handle(args, *profile, interceptHttp, helmChartOverrides)
 	},
 }

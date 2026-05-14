@@ -23,13 +23,14 @@ func NewHelmClient(runner ports.CommandRunner) *HelmClient {
 
 // Template renders a helm chart and returns the manifests as YAML.
 func (h *HelmClient) Template(name, chartPath, namespace string, args []string) ([]byte, error) {
-	cmdArgs := []string{"template", name, chartPath}
+	cmdArgs := []string{"template"}
 
 	if namespace != "" {
 		cmdArgs = append(cmdArgs, "--namespace", namespace)
 	}
 
 	cmdArgs = append(cmdArgs, args...)
+	cmdArgs = append(cmdArgs, "--", name, chartPath)
 
 	output, err := h.commandRunner.Run("helm", cmdArgs...)
 	if err != nil {
@@ -45,13 +46,13 @@ func (h *HelmClient) UpgradeFromManifests(name, namespace, wrapperChartPath stri
 		"upgrade",
 		"--install",
 		"--labels", "managed-by=pilot",
-		name,
-		wrapperChartPath,
 	}
 
 	if namespace != "" {
 		cmdArgs = append(cmdArgs, "--namespace", namespace)
 	}
+
+	cmdArgs = append(cmdArgs, "--", name, wrapperChartPath)
 
 	output, err := h.commandRunner.Run("helm", cmdArgs...)
 	if err != nil {
@@ -63,10 +64,11 @@ func (h *HelmClient) UpgradeFromManifests(name, namespace, wrapperChartPath stri
 
 // Uninstall removes a helm release.
 func (h *HelmClient) Uninstall(name, namespace string) error {
-	cmdArgs := []string{"uninstall", name}
+	cmdArgs := []string{"uninstall"}
 	if namespace != "" {
 		cmdArgs = append(cmdArgs, "--namespace", namespace)
 	}
+	cmdArgs = append(cmdArgs, "--", name)
 
 	output, err := h.commandRunner.Run("helm", cmdArgs...)
 	if err != nil {

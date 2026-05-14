@@ -425,6 +425,28 @@ pilot update api
 pilot context info
 ```
 
+### Developing Helm Charts Locally
+
+Use the `--helm-chart` flag to point to a local chart directory when developing a service's Helm chart. This skips the git fetch and renders the chart from your working directory — useful for testing changes without committing.
+
+```bash
+# Deploy the api service using a local chart directory
+pilot install api --helm-chart api:./charts/api
+
+# Rebuild and redeploy from local chart
+pilot update api --helm-chart api:./charts/api
+
+# Multiple services at once
+pilot install --helm-chart api:./charts/api --helm-chart worker:../worker-chart
+```
+
+Notes:
+
+- The path is the chart directory root; it overrides the service's configured chart location.
+- Only that invocation is affected; `~/.pilot-config.yaml` is not modified.
+- Re-run the command after editing the chart to redeploy.
+- Tab completion suggests service names first, then directories after `:`.
+
 ### Working on Multiple Services
 
 ```bash

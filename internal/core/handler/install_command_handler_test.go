@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"bytes"
+	"io"
+	"os"
 	"testing"
 
 	"pilot/internal/core"
@@ -198,6 +201,191 @@ func TestInstallCommandHandler_HandleInstallsOnlySelectedService(t *testing.T) {
 	containerOrchestrator.AssertNumberOfCalls(t, "InstallDevProxy", 1)
 	scm.AssertNumberOfCalls(t, "Download", 1)
 	scm.AssertExpectations(t)
+}
+
+func TestInstallCommandHandler_HandleSkipsNamedNonDeployableService(t *testing.T) {
+	configContext := &domain.ConfigurationContext{
+		Name: "Test",
+		Services: []domain.Service{
+			{
+				Name:         "deployable",
+				HelmRepoPath: "any-repo",
+				HelmBranch:   "any-branch",
+				Profiles:     []string{"all"},
+			},
+			{
+				Name:     "automation",
+				Profiles: []string{"all"},
+			},
+		},
+	}
+	configRepository := new(testutil.MockConfigRepository)
+	configRepository.On("LoadEnvKey", mock.Anything).Return("any-key", nil)
+	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
+	containerOrchestrator := new(testutil.MockContainerOrchestrator)
+	containerOrchestrator.On("CreateClusterEnvironmentKey").Return("any-key", nil)
+	containerOrchestrator.On("InstallDevProxy", mock.Anything, mock.Anything).Return(nil)
+	containerOrchestrator.On("GetDevProxyChecksum").Return("", nil)
+	fileSystem := new(testutil.MockFileSystem)
+	fileSystem.On("WriteFile", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	fileSystem.On("HomeDir").Return("/home/test", nil)
+	fileSystem.On("RemoveAll", mock.Anything).Return(nil)
+	containerImageRepository := new(testutil.MockContainerImageRepository)
+	containerImageRepository.On("BuildImage", mock.Anything).Return(nil)
+	devProxyManager := core.NewDevProxyManager(
+		configRepository,
+		fileSystem,
+		containerImageRepository,
+		containerOrchestrator,
+		core.NewDevProxyConfigGenerator(),
+	)
+	environmentEnsurer := core.NewEnvironmentEnsurer(configRepository, containerOrchestrator)
+
+	sut := NewInstallCommandHandler(
+		configRepository,
+		containerImageRepository,
+		containerOrchestrator,
+		devProxyManager,
+		environmentEnsurer,
+		new(testutil.MockScm),
+		internalTLSProvisioner("Test"),
+	)
+
+	err := sut.Handle([]string{"automation"}, "all", false, domain.HelmChartOverrides{})
+
+	assert.NoError(t, err)
+	containerOrchestrator.AssertNotCalled(t, "InstallService", mock.Anything, mock.Anything)
+}
+
+func TestInstallCommandHandler_TrackerExcludesNonDeployableService(t *testing.T) {
+	configContext := &domain.ConfigurationContext{
+		Name: "Test",
+		Services: []domain.Service{
+			{
+				Name:         "deployable",
+				HelmRepoPath: "any-repo",
+				HelmBranch:   "any-branch",
+				Profiles:     []string{"all"},
+			},
+			{
+				Name:     "automation",
+				Profiles: []string{"all"},
+			},
+		},
+	}
+	configRepository := new(testutil.MockConfigRepository)
+	configRepository.On("LoadEnvKey", mock.Anything).Return("any-key", nil)
+	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
+	containerOrchestrator := new(testutil.MockContainerOrchestrator)
+	containerOrchestrator.On("CreateClusterEnvironmentKey").Return("any-key", nil)
+	containerOrchestrator.On("InstallService", mock.MatchedBy(func(s *domain.Service) bool {
+		return s.Name == "deployable"
+	}), mock.Anything).Return(nil).Once()
+	containerOrchestrator.On("InstallDevProxy", mock.Anything, mock.Anything).Return(nil)
+	containerOrchestrator.On("GetDevProxyChecksum").Return("", nil)
+	fileSystem := new(testutil.MockFileSystem)
+	fileSystem.On("WriteFile", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	fileSystem.On("HomeDir").Return("/home/test", nil)
+	fileSystem.On("RemoveAll", mock.Anything).Return(nil)
+	scm := new(testutil.MockScm)
+	scm.On("Download", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	containerImageRepository := new(testutil.MockContainerImageRepository)
+	containerImageRepository.On("BuildImage", mock.Anything).Return(nil)
+	devProxyManager := core.NewDevProxyManager(
+		configRepository,
+		fileSystem,
+		containerImageRepository,
+		containerOrchestrator,
+		core.NewDevProxyConfigGenerator(),
+	)
+	environmentEnsurer := core.NewEnvironmentEnsurer(configRepository, containerOrchestrator)
+
+	sut := NewInstallCommandHandler(
+		configRepository,
+		containerImageRepository,
+		containerOrchestrator,
+		devProxyManager,
+		environmentEnsurer,
+		scm,
+		internalTLSProvisioner("Test"),
+	)
+
+	oldStdout := os.Stdout
+	reader, writer, _ := os.Pipe()
+	os.Stdout = writer
+	err := sut.Handle([]string{"deployable", "automation"}, "all", false, domain.HelmChartOverrides{})
+	writer.Close() //nolint:errcheck,gosec // test pipe close
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	_, copyErr := io.Copy(&buf, reader)
+	require.NoError(t, copyErr)
+	captured := buf.String()
+
+	assert.NoError(t, err)
+	assert.Contains(t, captured, "Installing deployable")
+	assert.NotContains(t, captured, "Installing automation")
+	containerOrchestrator.AssertNumberOfCalls(t, "InstallService", 1)
+	containerOrchestrator.AssertNotCalled(t, "InstallService", mock.MatchedBy(func(s *domain.Service) bool {
+		return s.Name == "automation"
+	}), mock.Anything)
+}
+
+func TestInstallCommandHandler_HandleSkipsNonDeployableServicesByProfile(t *testing.T) {
+	configContext := &domain.ConfigurationContext{
+		Name: "Test",
+		Services: []domain.Service{
+			{
+				Name:         "deployable",
+				HelmRepoPath: "any-repo",
+				HelmBranch:   "any-branch",
+				Profiles:     []string{"all"},
+			},
+			{
+				Name:     "automation",
+				Profiles: []string{"all"},
+			},
+		},
+	}
+	configRepository := new(testutil.MockConfigRepository)
+	configRepository.On("LoadEnvKey", mock.Anything).Return("any-key", nil)
+	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
+	containerOrchestrator := new(testutil.MockContainerOrchestrator)
+	containerOrchestrator.On("CreateClusterEnvironmentKey").Return("any-key", nil)
+	containerOrchestrator.On("InstallService", mock.Anything, mock.Anything).Return(nil)
+	containerOrchestrator.On("InstallDevProxy", mock.Anything, mock.Anything).Return(nil)
+	containerOrchestrator.On("GetDevProxyChecksum").Return("", nil)
+	fileSystem := new(testutil.MockFileSystem)
+	fileSystem.On("WriteFile", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	fileSystem.On("HomeDir").Return("/home/test", nil)
+	fileSystem.On("RemoveAll", mock.Anything).Return(nil)
+	scm := new(testutil.MockScm)
+	scm.On("Download", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	containerImageRepository := new(testutil.MockContainerImageRepository)
+	containerImageRepository.On("BuildImage", mock.Anything).Return(nil)
+	devProxyManager := core.NewDevProxyManager(
+		configRepository,
+		fileSystem,
+		containerImageRepository,
+		containerOrchestrator,
+		core.NewDevProxyConfigGenerator(),
+	)
+	environmentEnsurer := core.NewEnvironmentEnsurer(configRepository, containerOrchestrator)
+
+	sut := NewInstallCommandHandler(
+		configRepository,
+		containerImageRepository,
+		containerOrchestrator,
+		devProxyManager,
+		environmentEnsurer,
+		scm,
+		internalTLSProvisioner("Test"),
+	)
+
+	err := sut.Handle(nil, "all", false, domain.HelmChartOverrides{})
+
+	assert.NoError(t, err)
+	containerOrchestrator.AssertNumberOfCalls(t, "InstallService", 1)
 }
 
 func TestInstallCommandHandler_HandleWithInterceptHttp(t *testing.T) {

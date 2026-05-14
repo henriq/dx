@@ -97,7 +97,7 @@ var contextInfoCmd = &cobra.Command{
 		)
 
 		for _, service := range configContext.Services {
-			fmt.Printf("%-30s %-30s\n", service.Name, getSortedProfiles(service.Profiles))
+			fmt.Printf("%-30s %-30s\n", service.Name, formatServiceProfiles(service))
 		}
 		output.PrintNewline()
 
@@ -162,6 +162,17 @@ func getSortedProfiles(profiles []string) string {
 	}
 	slices.Sort(profiles)
 	return strings.Join(profiles, ", ")
+}
+
+func formatServiceProfiles(service domain.Service) string {
+	profiles := getSortedProfiles(service.Profiles)
+	if !service.IsDeployable() {
+		if profiles == "" {
+			return "(non-deployable)"
+		}
+		return profiles + " (non-deployable)"
+	}
+	return profiles
 }
 
 var contextSetCmd = &cobra.Command{

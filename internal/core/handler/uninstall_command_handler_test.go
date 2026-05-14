@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"bytes"
+	"io"
+	"os"
 	"testing"
 
 	"pilot/internal/core"
@@ -9,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUninstallCommandHandler_HandleUninstallsAllServices(t *testing.T) {
@@ -195,4 +199,163 @@ func TestUninstallCommandHandler_Handle_LoadConfigError(t *testing.T) {
 
 	assert.ErrorIs(t, result, assert.AnError)
 	containerOrchestrator.AssertNotCalled(t, "UninstallService", mock.Anything)
+}
+
+func TestUninstallCommandHandler_HandleSkipsNamedNonDeployableService(t *testing.T) {
+	configContext := &domain.ConfigurationContext{
+		Name: "Test",
+		Services: []domain.Service{
+			{
+				Name:         "deployable",
+				HelmRepoPath: "any-repo",
+				HelmBranch:   "any-branch",
+				Profiles:     []string{"all"},
+			},
+			{
+				Name:     "automation",
+				Profiles: []string{"all"},
+			},
+		},
+	}
+	configRepository := new(testutil.MockConfigRepository)
+	configRepository.On("LoadEnvKey", mock.Anything).Return("any-key", nil)
+	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
+	containerOrchestrator := new(testutil.MockContainerOrchestrator)
+	containerOrchestrator.On("CreateClusterEnvironmentKey").Return("any-key", nil)
+	containerOrchestrator.On("HasDeployedServices").Return(true, nil)
+	fileSystem := new(testutil.MockFileSystem)
+	fileSystem.On("HomeDir").Return("/home/test", nil)
+	devProxyManager := core.NewDevProxyManager(
+		configRepository,
+		fileSystem,
+		new(testutil.MockContainerImageRepository),
+		containerOrchestrator,
+		core.NewDevProxyConfigGenerator(),
+	)
+	environmentEnsurer := core.NewEnvironmentEnsurer(configRepository, containerOrchestrator)
+
+	sut := NewUninstallCommandHandler(
+		configRepository,
+		containerOrchestrator,
+		environmentEnsurer,
+		devProxyManager,
+	)
+
+	err := sut.Handle([]string{"automation"}, "all")
+
+	assert.NoError(t, err)
+	containerOrchestrator.AssertNotCalled(t, "UninstallService", mock.Anything)
+}
+
+func TestUninstallCommandHandler_TrackerExcludesNonDeployableService(t *testing.T) {
+	configContext := &domain.ConfigurationContext{
+		Name: "Test",
+		Services: []domain.Service{
+			{
+				Name:         "deployable",
+				HelmRepoPath: "any-repo",
+				HelmBranch:   "any-branch",
+				Profiles:     []string{"all"},
+			},
+			{
+				Name:     "automation",
+				Profiles: []string{"all"},
+			},
+		},
+	}
+	configRepository := new(testutil.MockConfigRepository)
+	configRepository.On("LoadEnvKey", mock.Anything).Return("any-key", nil)
+	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
+	containerOrchestrator := new(testutil.MockContainerOrchestrator)
+	containerOrchestrator.On("CreateClusterEnvironmentKey").Return("any-key", nil)
+	containerOrchestrator.On("UninstallService", mock.MatchedBy(func(s *domain.Service) bool {
+		return s.Name == "deployable"
+	})).Return(nil).Once()
+	containerOrchestrator.On("HasDeployedServices").Return(true, nil)
+	fileSystem := new(testutil.MockFileSystem)
+	fileSystem.On("HomeDir").Return("/home/test", nil)
+	devProxyManager := core.NewDevProxyManager(
+		configRepository,
+		fileSystem,
+		new(testutil.MockContainerImageRepository),
+		containerOrchestrator,
+		core.NewDevProxyConfigGenerator(),
+	)
+	environmentEnsurer := core.NewEnvironmentEnsurer(configRepository, containerOrchestrator)
+
+	sut := NewUninstallCommandHandler(
+		configRepository,
+		containerOrchestrator,
+		environmentEnsurer,
+		devProxyManager,
+	)
+
+	oldStdout := os.Stdout
+	reader, writer, _ := os.Pipe()
+	os.Stdout = writer
+	err := sut.Handle([]string{"deployable", "automation"}, "all")
+	writer.Close() //nolint:errcheck,gosec // test pipe close
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	_, copyErr := io.Copy(&buf, reader)
+	require.NoError(t, copyErr)
+	captured := buf.String()
+
+	assert.NoError(t, err)
+	assert.Contains(t, captured, "Uninstalling deployable")
+	assert.NotContains(t, captured, "Uninstalling automation")
+	containerOrchestrator.AssertNumberOfCalls(t, "UninstallService", 1)
+	containerOrchestrator.AssertNotCalled(t, "UninstallService", mock.MatchedBy(func(s *domain.Service) bool {
+		return s.Name == "automation"
+	}))
+}
+
+func TestUninstallCommandHandler_HandleSkipsNonDeployableServicesByProfile(t *testing.T) {
+	configContext := &domain.ConfigurationContext{
+		Name: "Test",
+		Services: []domain.Service{
+			{
+				Name:         "deployable",
+				HelmRepoPath: "any-repo",
+				HelmBranch:   "any-branch",
+				Profiles:     []string{"all"},
+			},
+			{
+				Name:     "automation",
+				Profiles: []string{"all"},
+			},
+		},
+	}
+	configRepository := new(testutil.MockConfigRepository)
+	configRepository.On("LoadEnvKey", mock.Anything).Return("any-key", nil)
+	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
+	containerOrchestrator := new(testutil.MockContainerOrchestrator)
+	containerOrchestrator.On("CreateClusterEnvironmentKey").Return("any-key", nil)
+	containerOrchestrator.On("UninstallService", mock.MatchedBy(func(s *domain.Service) bool {
+		return s.Name == "deployable"
+	})).Return(nil).Once()
+	containerOrchestrator.On("HasDeployedServices").Return(true, nil)
+	fileSystem := new(testutil.MockFileSystem)
+	fileSystem.On("HomeDir").Return("/home/test", nil)
+	devProxyManager := core.NewDevProxyManager(
+		configRepository,
+		fileSystem,
+		new(testutil.MockContainerImageRepository),
+		containerOrchestrator,
+		core.NewDevProxyConfigGenerator(),
+	)
+	environmentEnsurer := core.NewEnvironmentEnsurer(configRepository, containerOrchestrator)
+
+	sut := NewUninstallCommandHandler(
+		configRepository,
+		containerOrchestrator,
+		environmentEnsurer,
+		devProxyManager,
+	)
+
+	err := sut.Handle(nil, "all")
+
+	assert.NoError(t, err)
+	containerOrchestrator.AssertNumberOfCalls(t, "UninstallService", 1)
 }

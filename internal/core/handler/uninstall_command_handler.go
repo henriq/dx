@@ -6,6 +6,7 @@ import (
 	"pilot/internal/cli/output"
 	"pilot/internal/cli/progress"
 	"pilot/internal/core"
+	"pilot/internal/core/domain"
 	"pilot/internal/ports"
 )
 
@@ -42,7 +43,13 @@ func (h *UninstallCommandHandler) Handle(services []string, selectedProfile stri
 	}
 
 	// Collect services to uninstall
-	servicesToUninstall := configContext.FilterServices(services, selectedProfile)
+	candidateServices := configContext.FilterServices(services, selectedProfile)
+	var servicesToUninstall []domain.Service
+	for _, svc := range candidateServices {
+		if svc.IsDeployable() {
+			servicesToUninstall = append(servicesToUninstall, svc)
+		}
+	}
 
 	if len(servicesToUninstall) > 0 {
 		output.PrintHeader("Uninstalling services")

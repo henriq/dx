@@ -519,6 +519,50 @@ func TestFileSystemConfigRepository_LoadConfig_CachesResult(t *testing.T) {
 	assert.Same(t, config1, config2, "LoadConfig should return cached result")
 }
 
+func TestFileSystemConfigRepository_LoadConfig_NonDeployableServiceProfileAssignment(t *testing.T) {
+	fs := testutil.NewTestFileSystem(t)
+	repo := NewFileSystemConfigRepository(fs, &mockSecretsRepository{}, &mockTemplater{})
+
+	configContent := `contexts:
+  - name: test-context
+    services:
+      - name: deployable
+        helmRepoPath: /tmp/foo
+        helmBranch: main
+        helmChartRelativePath: helm
+        dockerImages:
+          - name: deployable-image
+            dockerfilePath: Dockerfile
+            buildContextRelativePath: "."
+            gitRepoPath: /tmp/repo
+            gitRef: main
+      - name: automation
+        dockerImages:
+          - name: automation-image
+            dockerfilePath: Dockerfile
+            buildContextRelativePath: "."
+            gitRepoPath: /tmp/repo
+            gitRef: main
+`
+	configPath := filepath.Join("~", ".pilot-config.yaml")
+	require.NoError(t, fs.WriteFile(configPath, []byte(configContent), ports.ReadWrite))
+
+	config, err := repo.LoadConfig()
+	require.NoError(t, err)
+	require.Len(t, config.Contexts, 1)
+	require.Len(t, config.Contexts[0].Services, 2)
+
+	deployable := config.Contexts[0].Services[0]
+	assert.Contains(t, deployable.Profiles, "default")
+	assert.Contains(t, deployable.Profiles, "all")
+	assert.NotEmpty(t, deployable.HelmPath)
+
+	automation := config.Contexts[0].Services[1]
+	assert.NotContains(t, automation.Profiles, "default")
+	assert.Contains(t, automation.Profiles, "all")
+	assert.Empty(t, automation.HelmPath)
+}
+
 func TestFileSystemConfigRepository_LoadCurrentConfigurationContext_NotFound(t *testing.T) {
 	fs := testutil.NewTestFileSystem(t)
 	repo := NewFileSystemConfigRepository(fs, &mockSecretsRepository{}, &mockTemplater{})

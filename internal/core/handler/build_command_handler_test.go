@@ -297,3 +297,55 @@ func TestBuildCommandHandler_Handle_BuildImageError(t *testing.T) {
 	scm.AssertExpectations(t)
 	containerImageRepository.AssertExpectations(t)
 }
+
+func TestBuildCommandHandler_HandleIncludesNonDeployableService(t *testing.T) {
+	configContext := &domain.ConfigurationContext{
+		Services: []domain.Service{
+			{
+				Name:         "deployable",
+				HelmRepoPath: "any-repo",
+				HelmBranch:   "any-branch",
+				DockerImages: []domain.DockerImage{
+					{
+						Name:                     "deployable-image",
+						DockerfilePath:           ".",
+						BuildContextRelativePath: "",
+						GitRepoPath:              "any-repo",
+						GitRef:                   "any-branch",
+					},
+				},
+				Profiles: []string{"all"},
+			},
+			{
+				Name: "automation",
+				DockerImages: []domain.DockerImage{
+					{
+						Name:                     "automation-image",
+						DockerfilePath:           ".",
+						BuildContextRelativePath: "",
+						GitRepoPath:              "any-automation-repo",
+						GitRef:                   "any-automation-branch",
+					},
+				},
+				Profiles: []string{"all"},
+			},
+		},
+	}
+	configRepository := new(testutil.MockConfigRepository)
+	configRepository.On("LoadCurrentConfigurationContext").Return(configContext, nil)
+	scm := new(testutil.MockScm)
+	scm.On("Download", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	containerImageRepository := new(testutil.MockContainerImageRepository)
+	containerImageRepository.On("BuildImage", mock.Anything).Return(nil)
+
+	sut := BuildCommandHandler{
+		configRepository:         configRepository,
+		scm:                      scm,
+		containerImageRepository: containerImageRepository,
+	}
+
+	result := sut.Handle(nil, "all")
+
+	assert.Nil(t, result)
+	containerImageRepository.AssertNumberOfCalls(t, "BuildImage", 2)
+}

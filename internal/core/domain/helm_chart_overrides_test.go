@@ -9,38 +9,7 @@ import (
 
 func mustOverrides(t *testing.T, chartDirectoryByService map[string]string) HelmChartOverrides {
 	t.Helper()
-	overrides, err := NewHelmChartOverrides(chartDirectoryByService)
-	require.NoError(t, err)
-	return overrides
-}
-
-func TestNewHelmChartOverrides_AcceptsValidServiceNames(t *testing.T) {
-	_, err := NewHelmChartOverrides(map[string]string{
-		"api":         "/a",
-		"worker-1":    "/b",
-		"frontend_v2": "/c",
-	})
-	require.NoError(t, err)
-}
-
-func TestNewHelmChartOverrides_RejectsInvalidServiceName(t *testing.T) {
-	cases := []string{
-		"",
-		"-leading-dash",
-		"a/b",
-		`a\b`,
-		"a..b",
-		"a\x00b",
-		"a b",
-		"-",
-	}
-	for _, name := range cases {
-		t.Run(name, func(t *testing.T) {
-			_, err := NewHelmChartOverrides(map[string]string{name: "/path"})
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "invalid service name")
-		})
-	}
+	return NewHelmChartOverrides(chartDirectoryByService)
 }
 
 func TestHelmChartOverrides_LookupChartDirectory_ReturnsConfiguredPath(t *testing.T) {
@@ -78,6 +47,16 @@ func TestHelmChartOverrides_ValidateAgainstServices_RejectsUnknownService(t *tes
 	assert.Contains(t, err.Error(), "api")
 	assert.Contains(t, err.Error(), "worker")
 	assert.NotContains(t, err.Error(), "--helm-chart", "domain error must not leak the CLI flag name")
+}
+
+func TestHelmChartOverrides_ValidateAgainstServices_ListsAvailableServicesAsSortedBullets(t *testing.T) {
+	services := []Service{{Name: "worker"}, {Name: "api"}, {Name: "frontend"}}
+	overrides := mustOverrides(t, map[string]string{"missing": "/override/missing"})
+
+	err := overrides.ValidateAgainstServices(services)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "available services:\n  - api\n  - frontend\n  - worker")
 }
 
 func TestHelmChartOverrides_ValidateAgainstServices_RejectsMultipleUnknownServices(t *testing.T) {

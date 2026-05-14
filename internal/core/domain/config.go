@@ -254,6 +254,23 @@ func (s *Service) validate(contextName string, index int) error {
 	if s.Name == "" {
 		return fmt.Errorf("service at index %d in context '%s' has empty name", index, contextName)
 	}
+	if strings.Contains(s.Name, ":") {
+		return fmt.Errorf(
+			"service '%s' in context '%s' has invalid name; ':' is not permitted",
+			s.Name,
+			contextName,
+		)
+	}
+	if controlIndex := strings.IndexFunc(s.Name, func(r rune) bool {
+		return r < 0x20 || r == 0x7f
+	}); controlIndex >= 0 {
+		return fmt.Errorf(
+			"service '%s' in context '%s' has invalid name; contains a control character at byte %d",
+			s.Name,
+			contextName,
+			controlIndex,
+		)
+	}
 	if err := s.validateHelmConfiguration(contextName); err != nil {
 		return err
 	}
@@ -325,6 +342,25 @@ func (i *DockerImage) validate(contextName, serviceName string, index int) error
 			index,
 			serviceName,
 			contextName,
+		)
+	}
+	if strings.Contains(i.Name, ":") {
+		return fmt.Errorf(
+			"docker image '%s' for service '%s' in context '%s' has invalid name; ':' is not permitted",
+			i.Name,
+			serviceName,
+			contextName,
+		)
+	}
+	if index := strings.IndexFunc(i.Name, func(r rune) bool {
+		return r < 0x20 || r == 0x7f
+	}); index >= 0 {
+		return fmt.Errorf(
+			"docker image '%s' for service '%s' in context '%s' has invalid name; contains a control character at byte %d",
+			i.Name,
+			serviceName,
+			contextName,
+			index,
 		)
 	}
 	if i.DockerfilePath == "" && strings.TrimSpace(i.DockerfileOverride) == "" {

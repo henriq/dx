@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/util/uuid"
 )
 
@@ -167,6 +168,118 @@ func TestConfig_Validate_ContextNamePathTraversal(t *testing.T) {
 			err := config.Validate()
 			if tt.wantErr {
 				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestConfig_Validate_DockerImageNameRules(t *testing.T) {
+	tests := []struct {
+		name          string
+		imageName     string
+		wantErr       bool
+		wantErrSubstr string
+	}{
+		{"plain name", "api", false, ""},
+		{"namespaced", "henriq/foo-service", false, ""},
+		{"registry prefixed", "registry.example.com/team/api", false, ""},
+		{"with dots", "foo.bar.baz", false, ""},
+		{"colon (tag-like)", "api:latest", true, "':' is not permitted"},
+		{"trailing colon", "api:", true, "':' is not permitted"},
+		{"leading colon", ":api", true, "':' is not permitted"},
+		{"null byte", "api\x00x", true, "control character"},
+		{"newline", "api\nx", true, "control character"},
+		{"tab", "api\tx", true, "control character"},
+		{"DEL", "api\x7fx", true, "control character"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := Config{
+				Contexts: []ConfigurationContext{
+					{
+						Name: "ctx",
+						Services: []Service{
+							{
+								Name:                  "test-svc",
+								HelmRepoPath:          "/tmp/helm",
+								HelmBranch:            "main",
+								HelmChartRelativePath: "charts",
+								DockerImages: []DockerImage{
+									{
+										Name:                     tt.imageName,
+										DockerfilePath:           "Dockerfile",
+										BuildContextRelativePath: ".",
+										GitRepoPath:              "/tmp/repo",
+										GitRef:                   "main",
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err := config.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErrSubstr)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestConfig_Validate_ServiceNameRules(t *testing.T) {
+	tests := []struct {
+		name          string
+		serviceName   string
+		wantErr       bool
+		wantErrSubstr string
+	}{
+		{"plain name", "api", false, ""},
+		{"with dash", "my-api", false, ""},
+		{"with underscore", "my_api", false, ""},
+		{"with slash", "team/api", false, ""},
+		{"colon", "api:v2", true, "':' is not permitted"},
+		{"null byte", "api\x00x", true, "control character"},
+		{"newline", "api\nx", true, "control character"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := Config{
+				Contexts: []ConfigurationContext{
+					{
+						Name: "ctx",
+						Services: []Service{
+							{
+								Name:                  tt.serviceName,
+								HelmRepoPath:          "/tmp/helm",
+								HelmBranch:            "main",
+								HelmChartRelativePath: "charts",
+								DockerImages: []DockerImage{
+									{
+										Name:                     "img",
+										DockerfilePath:           "Dockerfile",
+										BuildContextRelativePath: ".",
+										GitRepoPath:              "/tmp/repo",
+										GitRef:                   "main",
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err := config.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErrSubstr)
 			} else {
 				assert.NoError(t, err)
 			}

@@ -17,23 +17,22 @@ type ConfigurationContext struct {
 	LocalServices   []LocalService    `yaml:"localServices,omitempty"`
 }
 
-// Service represents a deployable service with its Docker configuration
 type Service struct {
 	Name                  string               `yaml:"name"`
 	HelmRepoPath          string               `yaml:"helmRepoPath"`
-	HelmPath              string               `yaml:"-"` // Will be ignored during YAML serialization
+	HelmPath              string               `yaml:"-"`
 	HelmChartRelativePath string               `yaml:"helmChartRelativePath"`
 	HelmBranch            string               `yaml:"helmBranch"`
 	HelmArgs              []string             `yaml:"helmArgs"`
-	LocalPort             *int                 `yaml:"localPort,omitempty"` // Using pointer to make nullable
+	LocalPort             *int                 `yaml:"localPort,omitempty"`
 	DockerImages          []DockerImage        `yaml:"dockerImages"`
 	RemoteImages          []string             `yaml:"remoteImages"`
 	Profiles              []string             `yaml:"profiles,omitempty"`
 	GitRepoPath           string               `yaml:"gitRepoPath"`
 	GitRef                string               `yaml:"gitRef"`
 	Certificates          []CertificateRequest `yaml:"certificates,omitempty"`
-	Path                  string               `yaml:"-"` // Will be ignored during YAML serialization
-	InterceptHttp         bool                 `yaml:"-"` // Runtime flag, not persisted
+	Path                  string               `yaml:"-"`
+	InterceptHttp         bool                 `yaml:"-"`
 }
 
 type DockerImage struct {
@@ -44,7 +43,7 @@ type DockerImage struct {
 	BuildArgs                []string `yaml:"buildArgs"`
 	GitRepoPath              string   `yaml:"gitRepoPath"`
 	GitRef                   string   `yaml:"gitRef"`
-	Path                     string   `yaml:"-"` // Will be ignored during YAML serialization
+	Path                     string   `yaml:"-"`
 }
 
 type LocalService struct {
@@ -100,6 +99,10 @@ func CreateDefaultConfig() Config {
 			},
 		},
 	}
+}
+
+func (s *Service) IsDeployable() bool {
+	return s.HelmRepoPath != "" || s.HelmBranch != "" || s.HelmChartRelativePath != ""
 }
 
 func (c *Config) ContextExists(name string) bool {
@@ -213,120 +216,169 @@ func (c *Config) Validate() error {
 	if c.MinPilotVersion != "" && !IsValidPilotVersion(c.MinPilotVersion) {
 		return fmt.Errorf("minPilotVersion %q is not valid semver", c.MinPilotVersion)
 	}
-
-	for i, ctx := range c.Contexts {
-		if ctx.Name == "" {
-			return fmt.Errorf("context at index %d has empty name", i)
-		}
-		if err := ValidateContextName(ctx.Name); err != nil {
-			return fmt.Errorf("context '%s': %w", ctx.Name, err)
-		}
-		if ctx.MinPilotVersion != "" && !IsValidPilotVersion(ctx.MinPilotVersion) {
-			return fmt.Errorf("context %q: minPilotVersion %q is not valid semver", ctx.Name, ctx.MinPilotVersion)
-		}
-
-		for j, svc := range ctx.Services {
-			if svc.Name == "" {
-				return fmt.Errorf("service at index %d in context '%s' has empty name", j, ctx.Name)
-			}
-			if svc.HelmRepoPath == "" {
-				return fmt.Errorf("service '%s' in context '%s' has empty helmPath", svc.Name, ctx.Name)
-			}
-			if svc.HelmBranch == "" {
-				return fmt.Errorf("service '%s' in context '%s' has empty helmBranch", svc.Name, ctx.Name)
-			}
-			if svc.HelmChartRelativePath == "" {
-				return fmt.Errorf("service '%s' in context '%s' has empty helmChartRelativePath", svc.Name, ctx.Name)
-			}
-
-			for k, img := range svc.DockerImages {
-				if img.Name == "" {
-					return fmt.Errorf(
-						"docker image at index %d for service '%s' in context '%s' has empty name",
-						k,
-						svc.Name,
-						ctx.Name,
-					)
-				}
-				if img.DockerfilePath == "" && strings.TrimSpace(img.DockerfileOverride) == "" {
-					return fmt.Errorf(
-						"docker image '%s' for service '%s' in context '%s' must have either dockerfilePath or dockerfileOverride",
-						img.Name,
-						svc.Name,
-						ctx.Name,
-					)
-				}
-				if img.BuildContextRelativePath == "" {
-					return fmt.Errorf(
-						"docker image '%s' for service '%s' in context '%s' has empty buildContextRelativePath",
-						img.Name,
-						svc.Name,
-						ctx.Name,
-					)
-				}
-				if img.GitRepoPath == "" {
-					return fmt.Errorf(
-						"docker image '%s' for service '%s' in context '%s' has empty gitRepoPath",
-						img.Name,
-						svc.Name,
-						ctx.Name,
-					)
-				}
-				if img.GitRef == "" {
-					return fmt.Errorf(
-						"docker image '%s' for service '%s' in context '%s' has empty gitRef",
-						img.Name,
-						svc.Name,
-						ctx.Name,
-					)
-				}
-			}
-
-			// Validate Certificates
-			for _, cert := range svc.Certificates {
-				if err := cert.Validate(svc.Name, ctx.Name); err != nil {
-					return err
-				}
-			}
-
-			// Check if RemoteImages contains empty strings
-			for k, remoteImg := range svc.RemoteImages {
-				if remoteImg == "" {
-					return fmt.Errorf(
-						"remote image at index %d for service '%s' in context '%s' is empty",
-						k,
-						svc.Name,
-						ctx.Name,
-					)
-				}
-			}
-		}
-
-		// Validate LocalServices
-		for j, localSvc := range ctx.LocalServices {
-			if localSvc.Name == "" {
-				return fmt.Errorf("local service at index %d in context '%s' has empty name", j, ctx.Name)
-			}
-			if localSvc.KubernetesPort <= 0 {
-				return fmt.Errorf(
-					"local service '%s' in context '%s' has invalid kubernetesPort",
-					localSvc.Name,
-					ctx.Name,
-				)
-			}
-			if localSvc.Selector == nil {
-				return fmt.Errorf(
-					"local service '%s' in context '%s' has empty selector",
-					localSvc.Name,
-					ctx.Name,
-				)
-			}
-		}
-	}
-
 	if len(c.Contexts) == 0 {
 		return fmt.Errorf("no contexts defined in configuration")
 	}
+	for i, ctx := range c.Contexts {
+		if err := ctx.validate(i); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
+func (c *ConfigurationContext) validate(index int) error {
+	if c.Name == "" {
+		return fmt.Errorf("context at index %d has empty name", index)
+	}
+	if err := ValidateContextName(c.Name); err != nil {
+		return fmt.Errorf("context '%s': %w", c.Name, err)
+	}
+	if c.MinPilotVersion != "" && !IsValidPilotVersion(c.MinPilotVersion) {
+		return fmt.Errorf("context %q: minPilotVersion %q is not valid semver", c.Name, c.MinPilotVersion)
+	}
+	for i, svc := range c.Services {
+		if err := svc.validate(c.Name, i); err != nil {
+			return err
+		}
+	}
+	for i, localSvc := range c.LocalServices {
+		if err := localSvc.validate(c.Name, i); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) validate(contextName string, index int) error {
+	if s.Name == "" {
+		return fmt.Errorf("service at index %d in context '%s' has empty name", index, contextName)
+	}
+	if err := s.validateHelmConfiguration(contextName); err != nil {
+		return err
+	}
+	for i, img := range s.DockerImages {
+		if err := img.validate(contextName, s.Name, i); err != nil {
+			return err
+		}
+	}
+	for _, cert := range s.Certificates {
+		if err := cert.Validate(s.Name, contextName); err != nil {
+			return err
+		}
+	}
+	for i, remoteImg := range s.RemoteImages {
+		if remoteImg == "" {
+			return fmt.Errorf(
+				"remote image at index %d for service '%s' in context '%s' is empty",
+				i,
+				s.Name,
+				contextName,
+			)
+		}
+	}
+	return nil
+}
+
+func (s *Service) validateHelmConfiguration(contextName string) error {
+	helmFieldsSet := 0
+	if s.HelmRepoPath != "" {
+		helmFieldsSet++
+	}
+	if s.HelmBranch != "" {
+		helmFieldsSet++
+	}
+	if s.HelmChartRelativePath != "" {
+		helmFieldsSet++
+	}
+	if helmFieldsSet != 0 && helmFieldsSet != 3 {
+		return fmt.Errorf(
+			"service '%s' in context '%s' has partial helm configuration: helmRepoPath, helmBranch, and helmChartRelativePath must all be set or all be empty",
+			s.Name,
+			contextName,
+		)
+	}
+	if s.IsDeployable() {
+		return nil
+	}
+	if len(s.Certificates) > 0 {
+		return fmt.Errorf(
+			"non-deployable service '%s' in context '%s' must not declare certificates",
+			s.Name,
+			contextName,
+		)
+	}
+	if s.LocalPort != nil {
+		return fmt.Errorf(
+			"non-deployable service '%s' in context '%s' must not declare localPort",
+			s.Name,
+			contextName,
+		)
+	}
+	return nil
+}
+
+func (i *DockerImage) validate(contextName, serviceName string, index int) error {
+	if i.Name == "" {
+		return fmt.Errorf(
+			"docker image at index %d for service '%s' in context '%s' has empty name",
+			index,
+			serviceName,
+			contextName,
+		)
+	}
+	if i.DockerfilePath == "" && strings.TrimSpace(i.DockerfileOverride) == "" {
+		return fmt.Errorf(
+			"docker image '%s' for service '%s' in context '%s' must have either dockerfilePath or dockerfileOverride",
+			i.Name,
+			serviceName,
+			contextName,
+		)
+	}
+	if i.BuildContextRelativePath == "" {
+		return fmt.Errorf(
+			"docker image '%s' for service '%s' in context '%s' has empty buildContextRelativePath",
+			i.Name,
+			serviceName,
+			contextName,
+		)
+	}
+	if i.GitRepoPath == "" {
+		return fmt.Errorf(
+			"docker image '%s' for service '%s' in context '%s' has empty gitRepoPath",
+			i.Name,
+			serviceName,
+			contextName,
+		)
+	}
+	if i.GitRef == "" {
+		return fmt.Errorf(
+			"docker image '%s' for service '%s' in context '%s' has empty gitRef",
+			i.Name,
+			serviceName,
+			contextName,
+		)
+	}
+	return nil
+}
+
+func (l *LocalService) validate(contextName string, index int) error {
+	if l.Name == "" {
+		return fmt.Errorf("local service at index %d in context '%s' has empty name", index, contextName)
+	}
+	if l.KubernetesPort <= 0 {
+		return fmt.Errorf(
+			"local service '%s' in context '%s' has invalid kubernetesPort",
+			l.Name,
+			contextName,
+		)
+	}
+	if l.Selector == nil {
+		return fmt.Errorf(
+			"local service '%s' in context '%s' has empty selector",
+			l.Name,
+			contextName,
+		)
+	}
 	return nil
 }

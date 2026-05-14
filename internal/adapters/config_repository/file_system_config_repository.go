@@ -81,13 +81,15 @@ func (c *FileSystemConfigRepository) LoadConfig() (*domain.Config, error) {
 
 		for j := range context.Services {
 			service := &context.Services[j]
-			if len(service.Profiles) == 0 {
+			if len(service.Profiles) == 0 && service.IsDeployable() {
 				service.Profiles = []string{"default"}
 			}
 			if !slices.Contains(service.Profiles, "all") {
 				service.Profiles = append(service.Profiles, "all")
 			}
-			service.HelmPath = filepath.Join(home, ".pilot", context.Name, "charts", shortHash(service.HelmRepoPath, service.HelmBranch))
+			if service.IsDeployable() {
+				service.HelmPath = filepath.Join(home, ".pilot", context.Name, "charts", shortHash(service.HelmRepoPath, service.HelmBranch))
+			}
 			for k := range context.Services[j].DockerImages {
 				image := &config.Contexts[i].Services[j].DockerImages[k]
 				if image.GitRepoPath == "" {

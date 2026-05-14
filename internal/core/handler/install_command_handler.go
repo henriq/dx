@@ -62,9 +62,13 @@ func (h *InstallCommandHandler) Handle(
 	}
 
 	// Collect services to install
-	servicesToInstall := configContext.FilterServices(services, selectedProfile)
-	for i := range servicesToInstall {
-		servicesToInstall[i].InterceptHttp = interceptHttp
+	candidateServices := configContext.FilterServices(services, selectedProfile)
+	var servicesToInstall []domain.Service
+	for _, svc := range candidateServices {
+		if svc.IsDeployable() {
+			svc.InterceptHttp = interceptHttp
+			servicesToInstall = append(servicesToInstall, svc)
+		}
 	}
 
 	for _, unusedOverride := range helmChartOverrides.FindUnusedOverrides(servicesToInstall) {

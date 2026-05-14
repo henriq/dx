@@ -174,6 +174,118 @@ func TestConfig_Validate_ContextNamePathTraversal(t *testing.T) {
 	}
 }
 
+func TestService_IsDeployable(t *testing.T) {
+	tests := []struct {
+		name    string
+		service Service
+		want    bool
+	}{
+		{"all helm fields empty is non-deployable", Service{Name: "svc"}, false},
+		{"any helm field set marks service deployable (partials rejected by Validate)", Service{HelmRepoPath: "x"}, true},
+		{"helmBranch set marks service deployable", Service{HelmBranch: "x"}, true},
+		{"helmChartRelativePath set marks service deployable", Service{HelmChartRelativePath: "x"}, true},
+		{
+			"all helm fields set is deployable",
+			Service{HelmRepoPath: "a", HelmBranch: "b", HelmChartRelativePath: "c"},
+			true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.service.IsDeployable())
+		})
+	}
+}
+
+func TestConfig_Validate_NonDeployableService(t *testing.T) {
+	baseImage := DockerImage{
+		Name:                     "img",
+		DockerfilePath:           "Dockerfile",
+		BuildContextRelativePath: ".",
+		GitRepoPath:              "/tmp/repo",
+		GitRef:                   "main",
+	}
+	localPort := 8080
+
+	tests := []struct {
+		name    string
+		service Service
+		wantErr bool
+	}{
+		{
+			name: "non-deployable with docker images is valid",
+			service: Service{
+				Name:         "automation",
+				DockerImages: []DockerImage{baseImage},
+			},
+			wantErr: false,
+		},
+		{
+			name:    "non-deployable with no docker images is valid",
+			service: Service{Name: "automation"},
+			wantErr: false,
+		},
+		{
+			name: "partial helm config (only repo) is rejected",
+			service: Service{
+				Name:         "svc",
+				HelmRepoPath: "/tmp/helm",
+				DockerImages: []DockerImage{baseImage},
+			},
+			wantErr: true,
+		},
+		{
+			name: "partial helm config (two of three) is rejected",
+			service: Service{
+				Name:                  "svc",
+				HelmRepoPath:          "/tmp/helm",
+				HelmChartRelativePath: "charts",
+				DockerImages:          []DockerImage{baseImage},
+			},
+			wantErr: true,
+		},
+		{
+			name: "non-deployable with localPort is rejected",
+			service: Service{
+				Name:      "automation",
+				LocalPort: &localPort,
+			},
+			wantErr: true,
+		},
+		{
+			name: "non-deployable with certificates is rejected",
+			service: Service{
+				Name: "automation",
+				Certificates: []CertificateRequest{{
+					Type:     CertificateTypeServer,
+					DNSNames: []string{"example.svc"},
+					K8sSecret: K8sSecretConfig{
+						Name: "cert-secret",
+						Type: K8sSecretTypeTLS,
+					},
+				}},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := Config{
+				Contexts: []ConfigurationContext{
+					{Name: "ctx", Services: []Service{tt.service}},
+				},
+			}
+			err := config.Validate()
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestNormalizePilotVersion(t *testing.T) {
 	tests := []struct {
 		input    string

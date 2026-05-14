@@ -2,18 +2,21 @@ package cmd
 
 import (
 	"pilot/cmd/cli/app"
+	"pilot/internal/cli/output"
 
 	"github.com/spf13/cobra"
 )
 
 var pullImages bool
 var updateHelmChartOverrides []string
+var updateImageSourceOverrides []string
 
 func init() {
 	rootCmd.AddCommand(updateCmd)
 	updateCmd.Flags().BoolVar(&pullImages, "pull", false, "pull images instead of building them")
 	updateCmd.Flags().BoolP("intercept-http", "i", false, "Enable HTTP interception via mitmweb proxy")
 	RegisterHelmChartOverrideFlag(updateCmd, &updateHelmChartOverrides)
+	RegisterImageSourceOverrideFlag(updateCmd, &updateImageSourceOverrides)
 }
 
 var updateCmd = &cobra.Command{
@@ -46,7 +49,10 @@ Use --intercept-http to enable HTTP traffic interception via mitmweb.`,
   pilot update --intercept-http
 
   # Render a service's Helm chart from a local directory
-  pilot update api --helm-chart api:./charts/api`,
+  pilot update api --helm-chart api:./charts/api
+
+  # Build an image from a local checkout, then redeploy
+  pilot update api --image-source api:./services/api`,
 	Args:              ServiceArgsValidator,
 	ValidArgsFunction: ServiceArgsCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -55,7 +61,14 @@ Use --intercept-http to enable HTTP traffic interception via mitmweb.`,
 		if err != nil {
 			return err
 		}
+		imageSourceOverrides, err := ParseImageSourceOverrides(updateImageSourceOverrides)
+		if err != nil {
+			return err
+		}
 		if pullImages {
+			if !imageSourceOverrides.IsEmpty() {
+				output.PrintWarning("--image-source has no effect when --pull is set; ignoring")
+			}
 			pullHandler, err := app.InjectPullCommandHandler()
 			if err != nil {
 				return err
@@ -70,7 +83,7 @@ Use --intercept-http to enable HTTP traffic interception via mitmweb.`,
 			if err != nil {
 				return err
 			}
-			err = buildHandler.Handle(args, *profile)
+			err = buildHandler.Handle(args, *profile, imageSourceOverrides)
 			if err != nil {
 				return err
 			}

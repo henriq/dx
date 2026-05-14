@@ -30,7 +30,11 @@ func NewBuildCommandHandler(
 	}
 }
 
-func (h *BuildCommandHandler) Handle(services []string, selectedProfile string) error {
+func (h *BuildCommandHandler) Handle(
+	services []string,
+	selectedProfile string,
+	imageSourceOverrides domain.DockerImageSourceOverrides,
+) error {
 	var dockerImagesToBuild []domain.DockerImage
 	var dockerImagesToPull []string
 
@@ -39,9 +43,24 @@ func (h *BuildCommandHandler) Handle(services []string, selectedProfile string) 
 		return err
 	}
 
+	var allConfiguredImages []domain.DockerImage
+	for _, service := range configContext.Services {
+		allConfiguredImages = append(allConfiguredImages, service.DockerImages...)
+	}
+	if err := imageSourceOverrides.ValidateAgainstImages(allConfiguredImages); err != nil {
+		return err
+	}
+
 	for _, service := range configContext.FilterServices(services, selectedProfile) {
 		dockerImagesToBuild = append(dockerImagesToBuild, service.DockerImages...)
 		dockerImagesToPull = append(dockerImagesToPull, service.RemoteImages...)
+	}
+
+	for _, unusedOverride := range imageSourceOverrides.FindUnusedOverrides(dockerImagesToBuild) {
+		output.PrintWarning(fmt.Sprintf(
+			"--image-source override for %q: no matching image in scope; ignoring",
+			unusedOverride,
+		))
 	}
 
 	if len(dockerImagesToBuild) > 0 {
@@ -60,7 +79,9 @@ func (h *BuildCommandHandler) Handle(services []string, selectedProfile string) 
 		imageInfos := make([]string, len(dockerImagesToBuild))
 		for i, img := range dockerImagesToBuild {
 			imageNames[i] = img.Name
-			if img.GitRepoPath != "" && img.GitRef != "" {
+			if sourcePath, hasOverride := imageSourceOverrides.LookupSourcePath(img.Name); hasOverride {
+				imageInfos[i] = fmt.Sprintf("local: %s", sourcePath)
+			} else if img.GitRepoPath != "" && img.GitRef != "" {
 				imageInfos[i] = fmt.Sprintf("%s @ %s", img.GitRepoPath, img.GitRef)
 			}
 		}
@@ -76,12 +97,15 @@ func (h *BuildCommandHandler) Handle(services []string, selectedProfile string) 
 				output.PrintSecondary("Using inline Dockerfile from configuration")
 			}
 
-			// Download source
-			if err := h.scm.Download(image.GitRepoPath, image.GitRef, image.Path); err != nil {
-				tracker.CompleteItem(i, err)
-				tracker.PrintItemComplete(i)
-				buildErr = err
-				break
+			if sourcePath, hasOverride := imageSourceOverrides.LookupSourcePath(image.Name); hasOverride {
+				image.Path = sourcePath
+			} else {
+				if err := h.scm.Download(image.GitRepoPath, image.GitRef, image.Path); err != nil {
+					tracker.CompleteItem(i, err)
+					tracker.PrintItemComplete(i)
+					buildErr = err
+					break
+				}
 			}
 
 			// Build image

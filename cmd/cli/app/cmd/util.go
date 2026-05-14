@@ -211,6 +211,136 @@ func helmChartOverrideServiceCompletions(services []domain.Service) []cobra.Comp
 	return completions
 }
 
+// RegisterImageSourceOverrideFlag wires the --image-source flag onto cmd,
+// binding repeated "image:path" values into target.
+//
+// The delimiter is ":" rather than "=" to avoid a misfire in Cobra's zsh and
+// fish completion scripts, whose `-.*=` regex mangles values containing a dash.
+func RegisterImageSourceOverrideFlag(cmd *cobra.Command, target *[]string) {
+	cmd.Flags().StringArrayVar(
+		target,
+		"image-source",
+		nil,
+		"build a Docker image from a local directory instead of cloning the repo (useful for testing local image changes); format: image:path; repeat for multiple images",
+	)
+	_ = cmd.RegisterFlagCompletionFunc("image-source", ImageSourceOverrideCompletion)
+}
+
+// ImageSourceOverrideCompletion offers Docker image names with a trailing ":"
+// until the user types one, then switches to directory completion for the path.
+func ImageSourceOverrideCompletion(
+	cmd *cobra.Command,
+	args []string,
+	toComplete string,
+) ([]cobra.Completion, cobra.ShellCompDirective) {
+	if separatorIndex := strings.Index(toComplete, ":"); separatorIndex >= 0 {
+		imagePrefix := toComplete[:separatorIndex+1]
+		pathToComplete := toComplete[separatorIndex+1:]
+		return helmChartOverrideDirectoryCompletions(imagePrefix, pathToComplete), cobra.ShellCompDirectiveNoSpace
+	}
+	configRepo, err := app.InjectConfigRepo()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+	configContext, err := configRepo.LoadCurrentConfigurationContext()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+	return imageSourceOverrideImageCompletions(configContext.Services), cobra.ShellCompDirectiveNoSpace
+}
+
+func imageSourceOverrideImageCompletions(services []domain.Service) []cobra.Completion {
+	seen := map[string]struct{}{}
+	var completions []cobra.Completion
+	for _, service := range services {
+		for _, image := range service.DockerImages {
+			if _, ok := seen[image.Name]; ok {
+				continue
+			}
+			seen[image.Name] = struct{}{}
+			completions = append(completions, image.Name+":")
+		}
+	}
+	return completions
+}
+
+// ParseImageSourceOverrides converts repeated --image-source entries in
+// "image:path" form into a DockerImageSourceOverrides value. Duplicate image
+// entries take the last value.
+func ParseImageSourceOverrides(entries []string) (domain.DockerImageSourceOverrides, error) {
+	sourcePathByImage := map[string]string{}
+	for _, entry := range entries {
+		imageName, sourcePath, found := strings.Cut(entry, ":")
+		if !found {
+			return domain.DockerImageSourceOverrides{}, fmt.Errorf(
+				"invalid --image-source value %q; expected format: image:path",
+				entry,
+			)
+		}
+		imageName = strings.TrimSpace(imageName)
+		sourcePath = strings.TrimSpace(sourcePath)
+		if imageName == "" {
+			return domain.DockerImageSourceOverrides{}, fmt.Errorf(
+				"invalid --image-source value %q; image name cannot be empty",
+				entry,
+			)
+		}
+		if sourcePath == "" {
+			return domain.DockerImageSourceOverrides{}, fmt.Errorf(
+				"invalid --image-source value %q; source path cannot be empty",
+				entry,
+			)
+		}
+		if index := strings.IndexFunc(sourcePath, func(r rune) bool {
+			return r < 0x20 || r == 0x7f
+		}); index >= 0 {
+			return domain.DockerImageSourceOverrides{}, fmt.Errorf(
+				"invalid --image-source value %q; source path contains a control character at byte %d",
+				entry,
+				index,
+			)
+		}
+		expandedSourcePath, err := expandLeadingTilde(sourcePath)
+		if err != nil {
+			return domain.DockerImageSourceOverrides{}, fmt.Errorf(
+				"failed to resolve --image-source path %q: %w",
+				sourcePath,
+				err,
+			)
+		}
+		absoluteSourcePath, err := filepath.Abs(expandedSourcePath)
+		if err != nil {
+			return domain.DockerImageSourceOverrides{}, fmt.Errorf(
+				"failed to resolve --image-source path %q: %w",
+				sourcePath,
+				err,
+			)
+		}
+		info, err := os.Stat(absoluteSourcePath)
+		if errors.Is(err, os.ErrNotExist) {
+			return domain.DockerImageSourceOverrides{}, fmt.Errorf(
+				"invalid --image-source path %q: does not exist",
+				absoluteSourcePath,
+			)
+		}
+		if err != nil {
+			return domain.DockerImageSourceOverrides{}, fmt.Errorf(
+				"invalid --image-source path %q: %w",
+				absoluteSourcePath,
+				err,
+			)
+		}
+		if !info.IsDir() {
+			return domain.DockerImageSourceOverrides{}, fmt.Errorf(
+				"invalid --image-source path %q: not a directory",
+				absoluteSourcePath,
+			)
+		}
+		sourcePathByImage[imageName] = absoluteSourcePath
+	}
+	return domain.NewDockerImageSourceOverrides(sourcePathByImage), nil
+}
+
 // ParseHelmChartOverrides converts repeated --helm-chart entries in
 // "service:path" form into a HelmChartOverrides value. Duplicate service
 // entries take the last value.
@@ -226,8 +356,11 @@ func ParseHelmChartOverrides(entries []string) (domain.HelmChartOverrides, error
 		}
 		serviceName = strings.TrimSpace(serviceName)
 		chartPath = strings.TrimSpace(chartPath)
-		if err := domain.ValidateOverrideServiceName(serviceName); err != nil {
-			return domain.HelmChartOverrides{}, fmt.Errorf("invalid --helm-chart value %q: %w", entry, err)
+		if serviceName == "" {
+			return domain.HelmChartOverrides{}, fmt.Errorf(
+				"invalid --helm-chart value %q; service name cannot be empty",
+				entry,
+			)
 		}
 		if chartPath == "" {
 			return domain.HelmChartOverrides{}, fmt.Errorf(
@@ -282,5 +415,5 @@ func ParseHelmChartOverrides(entries []string) (domain.HelmChartOverrides, error
 		}
 		chartDirectoryByService[serviceName] = absoluteChartPath
 	}
-	return domain.NewHelmChartOverrides(chartDirectoryByService)
+	return domain.NewHelmChartOverrides(chartDirectoryByService), nil
 }

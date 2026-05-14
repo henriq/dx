@@ -1045,8 +1045,7 @@ func TestInstallCommandHandler_HandleSkipsScmDownloadForOverriddenService(t *tes
 		internalTLSProvisioner("Test"),
 	)
 
-	overrides, err := domain.NewHelmChartOverrides(map[string]string{"service-1": localChartDirectory})
-	require.NoError(t, err)
+	overrides := domain.NewHelmChartOverrides(map[string]string{"service-1": localChartDirectory})
 	result := sut.Handle([]string{}, "all", false, overrides)
 
 	assert.Nil(t, result)
@@ -1096,8 +1095,7 @@ func TestInstallCommandHandler_HandleFailsOnUnknownOverrideService(t *testing.T)
 		noCertProvisioner(),
 	)
 
-	overrides, err := domain.NewHelmChartOverrides(map[string]string{"unknown": "/does-not-exist/local-chart"})
-	require.NoError(t, err)
+	overrides := domain.NewHelmChartOverrides(map[string]string{"unknown": "/does-not-exist/local-chart"})
 	result := sut.Handle([]string{}, "all", false, overrides)
 
 	require.Error(t, result)
@@ -1168,8 +1166,7 @@ func TestInstallCommandHandler_HandleIgnoresOverrideForOutOfScopeService(t *test
 		internalTLSProvisioner("Test"),
 	)
 
-	overrides, err := domain.NewHelmChartOverrides(map[string]string{"service-2": localChartDirectory})
-	require.NoError(t, err)
+	overrides := domain.NewHelmChartOverrides(map[string]string{"service-2": localChartDirectory})
 	result := sut.Handle([]string{"service-1"}, "all", false, overrides)
 
 	assert.Nil(t, result)

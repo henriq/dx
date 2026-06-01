@@ -3,9 +3,10 @@ package handler
 import (
 	"fmt"
 	"sort"
-	"strings"
+	"time"
 
 	"pilot/internal/cli/output"
+	"pilot/internal/cli/progress"
 	"pilot/internal/core"
 	"pilot/internal/core/domain"
 	"pilot/internal/ports"
@@ -55,27 +56,58 @@ func (h *RunCommandHandler) Handle(scripts map[string]string, executionPlan []st
 		}
 
 		if len(dependentServices) > 0 {
-			dependentServiceNames := make([]string, 0, len(dependentServices))
-			for _, service := range dependentServices {
-				dependentServiceNames = append(dependentServiceNames, service.Name)
+			sort.Slice(dependentServices, func(i, j int) bool {
+				return dependentServices[i].Name < dependentServices[j].Name
+			})
+
+			for _, dependentService := range dependentServices {
+				if dependentService.GitRepoPath == "" || dependentService.GitRef == "" {
+					return fmt.Errorf("git repository path or ref is empty for service '%s'", dependentService.Name)
+				}
 			}
-			sort.Strings(dependentServiceNames)
-			output.PrintStep(
+
+			names := make([]string, len(dependentServices))
+			refs := make([]string, len(dependentServices))
+			for i, service := range dependentServices {
+				names[i] = service.Name
+				refs[i] = service.GitRef
+			}
+
+			fetchStartTime := time.Now()
+			output.PrintHeader(fmt.Sprintf("Fetching dependencies for %s", output.Bold(scriptName)))
+			fmt.Println()
+
+			tracker := progress.NewTrackerWithInfoAndVerb(names, refs, "Fetching")
+			tracker.Start()
+
+			var fetchErr error
+			for i, dependentService := range dependentServices {
+				tracker.StartItem(i)
+				downloadErr := h.scm.Download(dependentService.GitRepoPath, dependentService.GitRef, dependentService.Path)
+				tracker.CompleteItem(i, downloadErr)
+				tracker.PrintItemComplete(i)
+				if downloadErr != nil {
+					fetchErr = downloadErr
+					break
+				}
+			}
+
+			tracker.Stop()
+
+			if fetchErr != nil {
+				return fetchErr
+			}
+
+			fmt.Println()
+			output.PrintSuccess(
 				fmt.Sprintf(
-					"Updating repositories: %s",
-					output.Dim(strings.Join(dependentServiceNames, ", ")),
+					"Fetched %d %s in %s",
+					len(dependentServices),
+					output.Plural(len(dependentServices), "dependency", "dependencies"),
+					progress.FormatDuration(time.Since(fetchStartTime)),
 				),
 			)
-		}
-
-		for _, dependentService := range dependentServices {
-			if dependentService.GitRepoPath == "" || dependentService.GitRef == "" {
-				return fmt.Errorf("git repository path or ref is empty for service '%s'", dependentService.Name)
-			}
-			err = h.scm.Download(dependentService.GitRepoPath, dependentService.GitRef, dependentService.Path)
-			if err != nil {
-				return err
-			}
+			fmt.Println()
 		}
 
 		renderedScript, err := h.templater.Render(script, scriptName, renderValues)

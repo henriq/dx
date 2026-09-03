@@ -3,6 +3,13 @@
 # Build output directory
 BUILD_DIR := bin
 
+# Pin every go invocation to the exact version in go.mod's `go` directive, which
+# is what CI installs via setup-go's go-version-file. The default GOTOOLCHAIN=auto
+# prefers a newer local toolchain, which silently hides the standard-library
+# vulnerabilities govulncheck reports against the pinned version in CI.
+GO_VERSION := $(shell awk '/^go /{print $$2}' go.mod)
+export GOTOOLCHAIN := go$(GO_VERSION)
+
 # Default build for current platform
 build: generate
 	@mkdir -p $(BUILD_DIR)
@@ -35,6 +42,7 @@ lint: vet
 
 # Run all pre-commit checks (mirrors CI and release pipeline)
 pre-commit:
+	@echo "==> Toolchain: $(GOTOOLCHAIN)"
 	@echo "==> Generating..."
 	@go generate ./...
 	@echo "==> Tidying..."
